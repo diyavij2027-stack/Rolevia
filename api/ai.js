@@ -6,29 +6,13 @@ const MODELS = {
   default: process.env.MODEL_DEFAULT || "gemini-3.8-flash",
   complex: process.env.MODEL_COMPLEX || "gemini-3.8-flash"
 };
+const L = require("./_lib");
 const MAX_CHARS = 60000;          // prompt size cap
 const MAX_TOKENS = 8192;          // output cap (thinking models spend part of this on reasoning)
-const WINDOW_MS = 10 * 60 * 1000;  // rate window
-const MAX_REQ = Number(process.env.RATE_LIMIT_PER_10MIN || 40);
-const hits = new Map();           // best-effort, per warm instance
-
-function limited(ip) {
-  const now = Date.now(), arr = (hits.get(ip) || []).filter(t => now - t < WINDOW_MS);
-  arr.push(now); hits.set(ip, arr);
-  if (hits.size > 5000) for (const [k, v] of hits) if (!v.some(t => now - t < WINDOW_MS)) hits.delete(k);
-  return arr.length > MAX_REQ;
-}
-function allowedOrigin(req) {
-  const list = (process.env.ALLOWED_ORIGINS || "").split(",").map(s => s.trim()).filter(Boolean);
-  if (!list.length) return true;
-  const o = req.headers.origin || "";
-  return list.includes(o);
-}
 
 module.exports = async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
-  const raw = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
-  const key = raw.trim().replace(/^["']|["']$/g, "").trim();   // tolerate stray spaces/quotes when pasting
+  const key = L.env().geminiKey;
   if (req.method === "GET") {
     // Diagnostics: never returns the key itself.
     const named = Object.keys(process.env).filter(k => /gemini|google|api_?key/i.test(k) && k !== "GEMINI_API_KEY" && k !== "GOOGLE_API_KEY");
@@ -37,16 +21,21 @@ module.exports = async function handler(req, res) {
       ? "No GEMINI_API_KEY here, but similarly named variables exist: " + named.join(", ") + ". The name must be exactly GEMINI_API_KEY."
       : "GEMINI_API_KEY is not set for this deployment (" + (process.env.VERCEL_ENV || "unknown env") + "). Add it in Settings > Environment Variables with this environment ticked, then redeploy.";
     else if (!/^AIza/.test(key)) hint = "A key is set but it does not look like a Google AI Studio key (should start with AIza).";
-    return res.status(200).json({ ok: !!key, vercelEnv: process.env.VERCEL_ENV || null, deployment: process.env.VERCEL_URL || null, keyFormatLooksRight: key ? /^AIza[\w-]{30,}$/.test(key) : null, hint });
+    return res.status(200).json({ ok: !!key, backend: L.backendOn(), vercelEnv: process.env.VERCEL_ENV || null, keyFormatLooksRight: key ? /^AIza[\w-]{30,}$/.test(key) : null, hint });
   }
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   if (!key) return res.status(503).json({ error: "AI is not configured on this site." });
-  if (!allowedOrigin(req)) return res.status(403).json({ error: "Origin not allowed." });
-  const ip = String((req.headers["x-forwarded-for"] || "").split(",")[0] || req.socket.remoteAddress || "unknown").trim();
-  if (limited(ip)) return res.status(429).json({ error: "Too many requests. Try again in a few minutes." });
+  if (!L.allowedOrigin(req)) return res.status(403).json({ error: "Origin not allowed." });
 
-  let body = req.body;
-  if (typeof body === "string") { try { body = JSON.parse(body); } catch (e) { body = null; } }
+  // With the backend on, every AI call needs a signed-in user and passes the server-side usage gate.
+  let user = null;
+  if (L.backendOn()) {
+    user = await L.userFromRequest(req);
+    if (!user) return res.status(401).json({ error: "Please sign in again.", code: "session_expired" });
+  }
+  if (L.limited("ip:" + L.clientIp(req), Number(process.env.RATE_LIMIT_PER_10MIN || 60), 10 * 60 * 1000)) return res.status(429).json({ error: "Too many requests. Try again in a few minutes." });
+
+  const body = await L.readJson(req);
   if (!body || typeof body !== "object") return res.status(400).json({ error: "Invalid request." });
 
   let turns;
@@ -56,6 +45,19 @@ module.exports = async function handler(req, res) {
   const total = turns.reduce((n, m) => n + m.content.length, 0);
   if (!total || total > MAX_CHARS) return res.status(413).json({ error: "Prompt is empty or too long." });
   if (turns[turns.length - 1].role !== "user") return res.status(400).json({ error: "Last message must be from the user." });
+
+  if (user) {
+    const sid = typeof body.sessionId === "string" && /^[0-9a-f-]{36}$/i.test(body.sessionId) ? body.sessionId : null;
+    const t = await L.rpc("ai_touch", { p_user: user.id, p_session: sid });
+    if (!t.ok) {
+      const code = String(t.error || "");
+      if (/daily_cap/.test(code)) return res.status(429).json({ error: "Daily AI limit reached. Try again tomorrow.", code: "daily_cap" });
+      if (/session_cap/.test(code)) return res.status(403).json({ error: "This session reached its AI limit.", code: "session_cap" });
+      if (/session_closed/.test(code)) return res.status(403).json({ error: "This session is already finished.", code: "session_closed" });
+      if (/bad_session/.test(code)) return res.status(403).json({ error: "Unknown session.", code: "bad_session" });
+      return res.status(502).json({ error: "Usage check failed.", code: "usage_check" });
+    }
+  }
 
   const model = MODELS[body.tier] || MODELS.default;
   const payload = {
