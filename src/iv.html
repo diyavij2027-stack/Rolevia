@@ -24,7 +24,7 @@ if(TTS)try{speechSynthesis.onvoiceschanged=()=>{voiceCache=null}}catch(e){}
 
 /* ----- speech in (speech recognition with recovery) ----- */
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-const L={rec:null,active:false,base:"",cur:"",silence:null,hold:false,patience:3500,nos:0,net:0,cb:null};
+const L={rec:null,active:false,base:"",cur:"",silence:null,hold:false,patience:2800,nos:0,net:0,cb:null};
 const SRERR={"not-allowed":"Microphone access is blocked. Allow the microphone for this page in your browser's site settings, then retry.","service-not-allowed":"The browser blocked speech recognition for this page. If ROLEVIA is embedded, open it in a full browser tab, then retry.","audio-capture":"No microphone was found. Connect or enable a microphone, then retry.","network":"Speech recognition lost its network connection. Check your internet, then retry.","language-not-supported":"Speech recognition does not support this language setting.","unsupported":"This browser does not support speech recognition. Use Chrome, Edge or Safari on a device with a microphone."};
 function lStart(cb){L.cb=cb;L.base="";L.cur="";L.hold=false;L.nos=0;L.net=0;if(!SR){cb.fatal("unsupported");return}L.active=true;lRun()}
 function lRun(){if(!L.active)return;let r;try{r=new SR()}catch(e){L.active=false;L.cb.fatal("unsupported");return}
@@ -44,8 +44,9 @@ function lHold(ms){L.hold=true;clearTimeout(L.silence)}
 
 /* ----- list page ----- */
 R(/^\/interviews$/,()=>{const ls=liveSession();return{private:true,nav:"/interviews",title:"AI Mock Interviews",html:`${head("AI voice interviews","The interviewer speaks every question and listens to your spoken answers. There is no typing.")}
-<div class="grid g2"><div class="card stack"><h3>Start a new interview</h3><p class="muted">Choose a company, role and round, check your microphone, then talk it through.</p><div>${A("/interviews/new","Set up an interview","btn pri")}</div></div>
-<div class="card stack"><h3>This month</h3><p><span class="score" style="font-size:36px">${monthN()}</span> <span class="muted">interviews started. The Free plan includes 3 mock interviews for a year. Limits are configurable and not enforced until billing is set up.</span></p></div></div>
+<div class="grid g2"><div class="card stack"><h3>Start a new interview</h3><p class="muted">Choose a company, role and round, check your microphone, then talk it through. The interviewer is strict and will challenge vague answers and CV claims.</p><div>${A("/interviews/new","Set up an interview","btn pri")}</div></div>
+<div class="card stack"><span class="pill" style="align-self:flex-start">Separate option</span><h3>Situational &amp; case-based interview</h3><p class="muted">Workplace conflicts, leadership, decisions under uncertainty, ethical dilemmas and business cases on sales, revenue, costs and retention. Scenarios are practice scenarios written for you, not reported interview questions.</p><div><button class="btn pri" data-act="sitnew">Set up a situational interview</button></div></div></div>
+<div class="grid g2" style="margin-top:16px">${typeof SITE!=="undefined"&&SITE.on?SITE.dashCard():`<div class="card stack"><h3>This month</h3><p><span class="score" style="font-size:36px">${monthN()}</span> <span class="muted">interviews started.</span></p></div>`}</div>
 ${ls?`<div class="note info" style="margin-top:16px">You have an unfinished interview with ${esc(ls.company)}. ${A("/interviews/live/"+ls.id,"Resume it")}</div>`:""}
 <h3 style="margin:24px 0 10px">Previous attempts</h3>${S.reports.length?`<div class="stack">${S.reports.map(r=>`<a class="card row between" href="#/reports/${r.id}"><span><b>${esc(r.company)}</b> · ${esc(r.role)} · ${esc(r.round)}<br><span class="small muted">${fmtDate(r.date)}</span></span><span class="score" style="font-size:28px">${r.overall}</span></a>`).join("")}</div>`:`<div class="empty"><h3>No attempts yet</h3><p class="muted">Finish an interview and its report shows up here.</p></div>`}`}});
 
@@ -55,6 +56,7 @@ const suV=k=>SU.v[k]!==undefined?SU.v[k]:"";
 R(/^\/interviews\/new(?:\/([^/]+))?$/,slug=>{const co=slug&&S.companies[slug]?S.companies[slug].name:"";
  const fresh=()=>({company:co,domain:"",role:S.profile.roles[0]||"Marketing",level:S.profile.level||LEVELS[0],round:ROUNDS[0],duration:"20",difficulty:"Standard",jd:""});
  if(!SU.v.role||slug){SU.v=Object.assign(fresh(),slug?{company:co}:{});SU.prep=null}
+ if(SU.pendingRound){SU.v.round=SU.pendingRound;SU.pendingRound=null;SU.prep=null}
  if(!SU.v.domain&&SU.v.company){const p=POP.find(x=>normName(x[0])===normName(SU.v.company))||(findPack(SU.v.company)&&[0,findPack(SU.v.company).industry]);if(p)SU.v.domain=p[1]}
  SU.step=1;
  return{private:true,nav:"/interviews",title:"Interview setup",html:`${crumbs([["/interviews","AI Mock Interviews"],[null,"New interview"]])}${head("Set up your voice interview","Questions are built from your CV, the company, the domain and the role.")}<div id="su"></div>`,mount:()=>{drawSetup();return()=>{lStop();stopSpeak()}}}});
@@ -71,7 +73,8 @@ function drawSetup(){const el=$("#su");if(!el)return;const set=PENDING_SET;let b
   <div class="field"><label for="idm">Domain / industry</label><select id="idm" name="domain"><option value="">Select…</option>${INDUSTRIES.map(r=>`<option ${r===suV("domain")?"selected":""}>${r}</option>`).join("")}</select></div>
   <div class="field"><label for="ir">Job role</label><select id="ir" name="role">${ROLES.map(r=>`<option ${r===suV("role")?"selected":""}>${r}</option>`).join("")}</select></div>
   <div class="field"><label for="il">Experience level</label><select id="il" name="level">${LEVELS.map(l=>`<option ${l===suV("level")?"selected":""}>${l}</option>`).join("")}</select></div>
-  <div class="field"><label for="io">Interview round</label><select id="io" name="round">${ROUNDS.map(r=>`<option ${r===suV("round")?"selected":""}>${r}</option>`).join("")}</select></div></div>
+  <div class="field"><label for="io">Interview round</label><select id="io" name="round">${[...ROUNDS,SIT_ROUND].map(r=>`<option ${r===suV("round")?"selected":""}>${r}</option>`).join("")}</select></div></div>
+  ${suV("round")===SIT_ROUND?`<div class="note info small"><b>Situational and case round.</b> Scenarios are practice scenarios written by ROLEVIA for your role and company. They are <b>not</b> questions reported from real interviews. Method references: ${SIT_REFS.map(([t,u])=>`<a href="${u}" target="_blank" rel="noopener noreferrer">${esc(t)}</a>`).join(" · ")}.</div>`:""}
   ${pf?`<div class="note info small"><b>Public research found for ${esc(pf.pack.name)}.</b> ${pf.pack.sources.length} source${pf.pack.sources.length==1?"":"s"}; evidence is anecdotal and limited. The match for your role: <b>${pf.match}</b>.</div>`:suV("company")?`<div class="note small">No collected public interview reports for ${esc(suV("company"))}. The interview will use your CV plus an AI briefing on the role and domain, clearly marked as not company-reported.</div>`:""}`}
  else if(SU.step===2)body=`<div class="grid g2"><div class="field"><label for="id">Duration</label><select id="id" name="duration">${[["10","10 minutes · about 4 questions"],["20","20 minutes · about 7 questions"],["30","30 minutes · about 10 questions"]].map(([v,t])=>`<option value="${v}" ${v===suV("duration")?"selected":""}>${t}</option>`).join("")}</select></div>
  <div class="field"><label for="if">Difficulty</label><select id="if" name="difficulty">${["Easy","Standard","Hard"].map(x=>`<option ${x===suV("difficulty")?"selected":""}>${x}</option>`).join("")}</select></div></div>
@@ -210,7 +213,7 @@ function liveMount(s){
    if(c==="hold"){lHold();lStop();L.patience=9000;listenNow();G.hint="Take your time. I will wait.";const h=$("#vhint");if(h)h.textContent=G.hint;return}
    if(c==="skip"){text="(skipped)"}
    if(c==="end"){lStop();finish();return}}
-  L.patience=3500;G.busyTurn=true;lStop();clearTimeout(G.cutTimer);clearTimeout(G.answerTimer);
+  L.patience=2800;G.busyTurn=true;lStop();clearTimeout(G.cutTimer);clearTimeout(G.answerTimer);
   if(G.closing){G.busyTurn=false;return closingReply(text)}
   if(t&&t.a==null){t.a=text||"(no answer given)";t.ms=Date.now()-G.turnStart;if(interrupted)t.cutIn=true;save()}
   G.followRun=t&&t.kind==="followup"?G.followRun+1:0;
@@ -226,8 +229,8 @@ function liveMount(s){
   if(mainsDone()>=s.total||outOfTime()||(G.timeUp&&mainsDone()>0)){return closing()}
   setPhase("think");let r=null;const used=new Set(s.turns.filter(t=>t.slot>=0).map(t=>t.slot));
   if(!s.turns.length){const p0=planOf(0)||{type:"cv",origin:"cv",focus:"Introduction",basis:"CV overview"};
-   r={say:`Hello${S.user&&S.user.name?" "+S.user.name.split(" ")[0]:""}, and thank you for joining. I am your interviewer for the ${s.role} role${s.company?" at "+s.company:""}. I have gone through your CV, so I will ask about your actual experience. Let's begin. Please tell me about yourself, and what draws you to this role${s.company?" at "+s.company:""}.`,kind:"main",slot:0}}
-  else if(!s.ailess){try{r=await ai(turnPrompt(),{tier:"default",cache:false});if(G.gone)return;if(!r||!r.say)throw{code:"invalid_json"}}
+   r={say:`Hello${S.user&&S.user.name?" "+S.user.name.split(" ")[0]:""}. I am your interviewer for the ${s.role} role${s.company?" at "+s.company:""}. I have read your CV, so expect questions on your real experience, and I will push on anything vague. ${s.round===SIT_ROUND?"This is a situational and case round: I will give you scenarios, so think aloud. First, tell me briefly about yourself.":"First, tell me briefly about yourself and why this role."}`,kind:"main",slot:0}}
+  else if(!s.ailess){try{r=await ai(turnPrompt(),{tier:"quick",cache:false});if(G.gone)return;if(!r||!r.say)throw{code:"invalid_json"}}
    catch(e){if(G.gone)return;if(e&&(e.code==="unavailable"||e.code==="not_granted"||e.code==="sampling_disabled")){s.ailess=true;save();G.notice="Adaptive follow-ups are unavailable, so I will use the planned questions."}
     else{return fail(aiMsg(e)+" Your progress is saved.","vretryturn","Try again")}}}
   if(!r){const rem=(s.plan||[]).map((p,i)=>i).filter(i=>!used.has(i));const i=rem.length?rem[0]:-1;const p=planOf(i);
@@ -255,21 +258,22 @@ CANDIDATE CV ANALYSIS (this is the candidate's real background; ask about it, ne
 PUBLICLY REPORTED PROCESS AND PATTERNS FOR THIS COMPANY (anecdotal): ${ev}
 ROLE AND DOMAIN BRIEFING (AI general knowledge, unverified): ${brief}
 PLAN SLOTS NOT YET ASKED (choose what fits best next, adapt the wording to what the candidate has said; each has a type and origin): ${JSON.stringify(remaining).slice(0,3800)}
-Everything you write is read aloud, so use natural spoken English: short sentences, no lists, no markdown, no emojis, under 60 words. The candidate's answers are speech-to-text transcripts and may contain recognition errors, so never comment on spelling or grammar.
+Everything you write is read aloud, so use natural spoken English: short sentences, no lists, no markdown, no emojis, MAXIMUM 35 words. Keep a fast, realistic pace: no small talk, no praise, no long preambles. The candidate's answers are speech-to-text transcripts and may contain recognition errors, so never comment on spelling or grammar.
 Main questions asked so far: ${mainsDone()} of ${s.total}. Follow-ups in a row: ${G.followRun}. Minutes left: ${Math.max(0,Math.round((s.duration*60-s.elapsed)/60))}.
 Transcript so far:\n${hist}\n
-How to decide the next turn, like a skilled interviewer:
-1. Briefly acknowledge what they said in a few natural words that reveal nothing about a model answer. Do NOT give feedback, scores or hints.
-2. If the last answer was vague, unsupported, unmeasured, rehearsed, or contradicts the CV, challenge it naturally with ONE sharp follow-up that quotes their own words or a CV item (for example: "You said you led it. What exactly did you decide yourself?" or "What number moved because of that?"). Do not follow up more than twice in a row.
-3. Otherwise ask a main question from the unasked plan slots. Pick the one that best fits the conversation, and word it for this candidate and this company, naming CV items and company specifics. Keep a balanced mix over the interview (CV, company and role, domain knowledge, behavioural or situational, problem-solving). If a slot has origin "reported", you may ask it in your own words, but never say or imply to the candidate that the company asked it. Never ask anything unrelated to their background or the role without a clear reason.
-4. If strong answers so far, raise the difficulty a little; if struggling, make it more approachable.
-5. One question only. Do not repeat anything already asked.
+You are a STRICT, challenging interviewer, not a coach. How to decide the next turn:
+1. Open with at most four neutral words ("Okay.", "Understood.", "Right.") or nothing. Never praise, score or hint at a model answer.
+2. Probe the last answer FIRST. If it was vague, had no specific example, no number or outcome, did not answer the question, was rehearsed or generic, was factually doubtful, or conflicts with the CV, ask ONE sharp follow-up that quotes their own words or a CV item (for example: "You said 'we improved it'. What did you personally do, and by how much?" or "Why that option and not the cheaper one?"). Challenge their decisions: ask what alternatives they rejected, what went wrong, and what they would do differently. Do not follow up more than twice in a row.
+3. If the answer was specific and solid, move on: ask a main question from the unasked plan slots, worded for this candidate and company, naming CV items or company specifics. Keep a balanced mix (CV, company and role, domain knowledge, behavioural or situational, problem-solving). If a slot has origin "reported", you may ask it in your own words but never say or imply the company asked it. Origin "practice" slots are practice scenarios: present them as hypotheticals, never as real company events.
+4. If answers are strong, raise the difficulty (add a constraint, a trade-off or a number). If the candidate is struggling, narrow the question rather than rescuing them.
+5. ${s.round===SIT_ROUND?"This is a SITUATIONAL and CASE round. Run each scenario as a dialogue: after the candidate structures their approach, add ONE hypothetical data point (say clearly it is a hypothetical figure for practice, never real company data) and ask them to prioritise, quantify or decide. For conflict, leadership and ethics scenarios, ask what they would actually say or do, and what the downside is.":"Do not invent facts about the company; if you need a number for a case, say it is hypothetical."}
+6. One question only. Never repeat anything already asked.
 Reply with only JSON: {"say":"what you will say aloud","kind":"main|followup","slot":number of the plan slot you used (or -1 for a follow-up or a new question),"topic":"2-4 word topic"}`}
 
  /* closing phase */
  async function closing(){G.closing=true;G.busyTurn=false;setPhase("closing");
   const ok=await say("That brings me to the end of my questions. Before we finish, do you have any questions for me?","closing");if(ok&&!G.paused)listenClosing()}
- function listenClosing(){G.heard="";G.turnStart=Date.now();setPhase("closing");L.patience=3500;
+ function listenClosing(){G.heard="";G.turnStart=Date.now();setPhase("closing");L.patience=2800;
   lStart({status:()=>{},update:t=>{G.heard=t},auto:t=>closingReply(t),quiet:n=>{if(n>=3){lStop();closingReply("(no questions)")}},fatal:c=>fail(SRERR[c]||SRERR.unsupported,"vretrymic","Retry microphone")})}
  async function closingReply(text){if(G.gone||G.busyTurn)return;G.busyTurn=true;lStop();text=(text||"").trim();s.candQ=text;save();
   const none=!text||text==="(no questions)"||/^(no|nope|nothing|no questions|not really|i m good|i am good|that s all)\b/i.test(text.replace(/[^a-zA-Z ]/g," ").trim());
@@ -298,28 +302,75 @@ Reply with only JSON: {"say":"what you will say aloud","kind":"main|followup","s
  return()=>{G.gone=true;lStop();stopSpeak();clearInterval(G.timer);clearTimeout(G.cutTimer);save();if(window.__G===G)window.__G=null}
 }
 
-/* ----- scoring after the interview ----- */
+/* ----- strict, evidence-based scoring -----
+   The model scores against a rubric; deterministic checks on the transcript then CAP the numbers so confidence, length or fluent waffle cannot inflate them.
+   Every cap is recorded and shown in the report ("Why this score"). Nothing is scored that the transcript cannot show. */
+const SC_STOP=new Set("a an the and or but if so of to in on at for from with by as is are was were be been being it its this that these those i you he she we they me my your our their do does did have has had will would can could should may might not no yes what which who whom how why when where than then there here about into over under out up down just very really also more most some any each other such only own same too s t".split(" "));
+const scToks=t=>String(t||"").toLowerCase().replace(/[^a-z0-9\s]/g," ").split(/\s+/).filter(w=>w&&!SC_STOP.has(w)&&w.length>2);
+const SC_FILLERS=/\b(um+|uh+|erm|you know|kind of|sort of|basically|actually|literally|like)\b/g;
+function scChecks(turns){const seen=[];return turns.map((t,i)=>{const a=(t.a==null||t.a==="(skipped)"||t.a==="(no answer given)")?"":String(t.a);const words=a.trim()?a.trim().split(/\s+/).length:0;
+  const qt=new Set(scToks(t.q)),at=scToks(a);const overlap=qt.size?at.filter(w=>qt.has(w)).length/Math.max(1,Math.min(at.length,40)):0;
+  const grams=new Set();for(let k=0;k+3<at.length;k++)grams.add(at.slice(k,k+4).join(" "));
+  let rep=0;if(grams.size){let hit=0;grams.forEach(g=>{if(seen.some(s=>s.has(g)))hit++});rep=hit/grams.size}
+  seen.push(grams);
+  const hasNum=/\d/.test(a)||/\b(percent|per cent|crore|lakh|million|thousand|hundred)\b/i.test(a);
+  const concrete=/\b(for example|for instance|when i|i built|i led|i ran|i decided|i created|i analys|i negotiated|i launched|i reduced|i increased|my role)\b/i.test(a);
+  const fill=((a.toLowerCase().match(SC_FILLERS)||[]).length)/Math.max(1,words);
+  return{i,words,overlap:+overlap.toFixed(2),rep:+rep.toFixed(2),hasNum,concrete,fill:+fill.toFixed(2),answered:words>0}})}
+/* returns the most a single answer may score, with the reasons */
+function scCap(c,t){const caps=[];const add=(m,why)=>caps.push([m,why]);
+ if(!c.answered)return[[0,"No answer was captured."]];
+ if(c.words<12)add(25,"Answer under 12 words: not enough to judge reasoning.");else if(c.words<25)add(45,"Answer under 25 words: too thin to show reasoning or evidence.");
+ if(c.rep>=0.35)add(50,"Large parts repeat what you already said in an earlier answer.");
+ const needsEvidence=t.type==="cv"||t.type==="behavioural"||t.type==="situational"||t.kind==="followup";
+ if(needsEvidence&&!c.hasNum&&!c.concrete)add(65,"No specific example, action or figure: claims are unsupported.");
+ if(t.kind==="followup"&&!c.hasNum&&c.words<40)add(55,"The interviewer pressed for specifics and the answer stayed general.");
+ if(c.fill>0.12&&c.words>=25)add(70,"Heavy filler words reduce clarity.");
+ return caps.sort((a,b)=>a[0]-b[0])}
+const scNorm=x=>String(x||"").toLowerCase().replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim();
+function strictInterview(r,turns){const checks=scChecks(turns),notes=[];
+ const pq=turns.map((t,i)=>{const src=(r.perQuestion||[])[i]||{};let sc=Math.max(0,Math.min(100,Math.round(+src.score||0)));const c=checks[i],caps=scCap(c,t);
+  if(caps.length&&sc>caps[0][0]){notes.push({q:i+1,from:sc,to:caps[0][0],why:caps[0][1]});sc=caps[0][0]}
+  /* a quote is only kept if it really appears in the candidate's answer */
+  const hay=scNorm(t.a);const quote=String(src.quote||"").trim();const qOk=quote.length>=8&&hay.includes(scNorm(quote));
+  return{score:sc,worked:src.worked||src.feedback||"",missing:src.missing||"",improved:src.improved||"",quote:qOk?quote:"",better:src.better||"",checks:c}});
+ const mean=pq.length?pq.reduce((a,x)=>a+x.score,0)/pq.length:0;
+ let ai=Math.max(0,Math.min(100,Math.round(+r.overall||0)));
+ let overall=Math.round(0.4*ai+0.6*mean);overall=Math.min(overall,Math.round(mean+8),92);
+ const answered=checks.filter(c=>c.answered).length;if(answered<Math.ceil(turns.length*0.6)){const lim=Math.round(70*answered/turns.length+10);if(overall>lim){notes.push({q:0,from:overall,to:lim,why:`Only ${answered} of ${turns.length} questions were answered.`});overall=lim}}
+ const dims={};const KEYS=["communication","clarity","reasoning","roleKnowledge","relevance","answerQuality","cvCredibility"];
+ KEYS.forEach(k=>{const v=r.dims&&r.dims[k];dims[k]=(v===null||v===undefined||v==="")?null:Math.min(Math.max(0,Math.round(+v)||0),overall+15,100)});
+ return{pq,overall,dims,notes,checks}}
 async function doFinish(s,room){const n=s.turns.filter(t=>t.a&&t.a!=="(skipped)"&&t.a!=="(no answer given)").length;
  if(n===0){s.status="done";save();room.innerHTML=`<div class="empty"><h3>Interview ended</h3><p class="muted">No answers were captured, so there is nothing to score.</p><p style="margin-top:10px">${A("/interviews","Back to interviews","btn pri")}</p></div>`;return}
  s.status="active";room.innerHTML=`<div class="stack" style="align-items:center;text-align:center;padding:40px 0">${loading("Scoring your answers against your CV and the role…")}</div>`;
- try{const hist=s.turns.map((t,i)=>`Q${i+1} [${t.kind}; type ${t.type||"?"}; basis: ${t.basis||""}]: ${t.q}\nA${i+1}: ${t.a??"(not answered)"}`).join("\n\n");
-  const R_=s.research||{},cvA=s.cvA||{};
-  const r=await ai(`You are an interview coach scoring a SPOKEN mock interview. Company: ${s.company}; domain: ${s.domain}; role: ${s.role}; round: ${s.round}; level: ${s.level}; difficulty: ${s.difficulty}. The answers are speech-to-text transcripts: ignore recognition errors, punctuation and filler words, and judge content, structure and relevance.
-CANDIDATE CV ANALYSIS (ground truth about the candidate): ${JSON.stringify(cvA).slice(0,4500)}
+ try{const hist=s.turns.map((t,i)=>`Q${i+1} [${t.kind}; type ${t.type||"?"}; origin ${t.origin||"?"}; basis: ${t.basis||""}]: ${t.q}\nA${i+1} (${(t.a&&t.a!=="(skipped)"?String(t.a).trim().split(/\s+/).length:0)} words): ${t.a??"(not answered)"}`).join("\n\n");
+  const R_=s.research||{},cvA=s.cvA||{},hasCv=!!(cvA&&(cvA.summary||(cvA.experience||[]).length));
+  const sit=s.round===SIT_ROUND;
+  const r=await ai(`You are a STRICT interview assessor scoring a SPOKEN mock interview. Company: ${s.company}; domain: ${s.domain}; role: ${s.role}; round: ${s.round}; level: ${s.level}; difficulty: ${s.difficulty}. The answers are speech-to-text transcripts: ignore recognition errors, punctuation and filler words, and judge content, structure and relevance only.
+${hasCv?`CANDIDATE CV ANALYSIS (ground truth about the candidate): ${JSON.stringify(cvA).slice(0,4500)}`:"No CV was analysed for this interview. Set cvCredibility to null and do not comment on CV claims."}
 RESEARCH USED (anecdotal, public): ${R_.packId?JSON.stringify({process:(R_.process||[]).map(x=>x.text),patterns:(R_.patterns||[]).map(x=>x.text)}).slice(0,1500):"no collected company reports"}; role/domain briefing: ${R_.brief?JSON.stringify({competencies:R_.brief.competencies,domainTopics:R_.brief.domainTopics}).slice(0,1200):"none"}
-Base every judgement ONLY on the answers and the CV analysis. Be specific and fair. NEVER invent achievements, numbers, employers or experiences for the candidate. In "improved" sample answers, use only facts the candidate stated in the interview or that appear in the CV analysis; where a fact or number is missing, write a placeholder such as [add your real result here] instead of making one up. Do not predict hiring outcomes. Skipped or unanswered questions lower relevant scores. Judge CV credibility by whether spoken answers confirm, extend or contradict the CV, and whether claims were backed with specifics. Scores are integers 0-100.
+${sit?"This was a SITUATIONAL AND CASE round: judge the structure of the approach, prioritisation, quantification, trade-offs, ethics and what the candidate would actually do. The scenarios and numbers were hypothetical practice material.":""}
+SCORING RULES (be strict; most candidates in practice interviews score 35-65):
+- 50 means a competent but generic answer. 65-75 needs a specific example with the candidate's own action AND a result or reasoned trade-off. 80+ is rare: specific, structured, quantified, relevant, and it survives the follow-up. Above 90 is almost never justified.
+- Penalise heavily: vague or generic answers, claims with no example or evidence, no numbers where numbers are expected, "we" without saying what the candidate personally did, answers that do not address the question, repeating earlier answers, rambling, evasive replies to follow-ups, and answers that contradict the CV or basic facts.
+- Do NOT reward confidence, fluency, length or enthusiasm. A short, precise, evidenced answer beats a long vague one. Skipped or unanswered questions score 0.
+- Judge only what the transcript shows. You cannot hear tone, pace, accent or see body language, so do NOT score or comment on them. If a dimension cannot be judged from the transcript, set it to null and explain in "notAssessed". NEVER invent achievements, numbers, employers or experiences for the candidate. In "improved", use only facts the candidate stated or that appear in the CV analysis; where a fact or number is missing write a placeholder like [add your real result here].
+- For each question include "quote": a short exact phrase (8-25 words) copied word for word from the candidate's answer that justifies the score, or an empty string if the answer has nothing worth quoting.
+- Scores are integers 0-100. Do not predict hiring outcomes.
 
 ${hist}
 
-Reply with only JSON: {"overall":0,"dims":{"communication":0,"cvCredibility":0,"roleFit":0,"domainKnowledge":0,"problemSolving":0,"structure":0},"summary":"2 sentences","cv":{"consistent":["claims the answers supported, with what was said"],"unsupported":["claims that stayed vague or unverified"],"contradictions":["anything that conflicted with the CV, or empty"],"note":"1-2 sentences on CV credibility"},"roleFit":"3 sentences on fit for this ${s.role} role at ${s.company}","domainKnowledge":"3 sentences with the specific topics that were strong or weak","communication":"2-3 sentences","strengths":["..."],"improvements":["..."],"perQuestion":[{"score":0,"worked":"what worked, referring to what they said","missing":"what was missing","improved":"a stronger answer built only from their real experience, with placeholders where facts are missing"}],"revision":["topics to revise, specific to ${s.company} and ${s.role}"],"plan":[{"when":"Today","step":""},{"when":"This week","step":""},{"when":"Before the interview","step":""}]}
+Reply with only JSON: {"overall":0,"dims":{"communication":0,"clarity":0,"reasoning":0,"roleKnowledge":0,"relevance":0,"answerQuality":0,"cvCredibility":null},"notAssessed":["what the transcript could not show"],"summary":"2 blunt sentences","cv":{"consistent":["claims the answers supported, with what was said"],"unsupported":["claims that stayed vague or unverified"],"contradictions":["anything that conflicted with the CV, or empty"],"note":"1-2 sentences, or empty if no CV"},"roleFit":"3 sentences on fit for this ${s.role} role at ${s.company}","domainKnowledge":"3 sentences naming the specific topics that were strong or weak","communication":"2-3 sentences on clarity and structure of the content","strengths":["only real, evidenced strengths; may be few"],"improvements":["specific weaknesses"],"missedOpportunities":["things the candidate could have said or asked but did not, tied to specific questions"],"perQuestion":[{"score":0,"quote":"","worked":"what worked, referring to what they said (or 'Nothing specific')","missing":"what was missing","improved":"a stronger answer built only from their real experience, with placeholders where facts are missing"}],"revision":["topics to revise, specific to ${s.company} and ${s.role}"],"plan":[{"when":"Today","step":""},{"when":"This week","step":""},{"when":"Before the interview","step":""}]}
 perQuestion must have exactly ${s.turns.length} items in the same order as the questions above.`,{tier:"default",cache:false});
-  const pq=(r.perQuestion||[]);
+  const st=strictInterview(r,s.turns);
   const rep={id:uid(),sessionId:s.id,company:s.company,domain:s.domain,role:s.role,round:s.round,level:s.level,difficulty:s.difficulty,date:Date.now(),minutes:Math.max(1,Math.round(s.elapsed/60)),
-   turns:s.turns,overall:Math.max(0,Math.min(100,Math.round(+r.overall||0))),dims:r.dims||{},summary:r.summary||"",strengths:r.strengths||[],improvements:r.improvements||[],
-   perQuestion:s.turns.map((t,i)=>({question:t.q,score:(pq[i]||{}).score,worked:(pq[i]||{}).worked||(pq[i]||{}).feedback||"",missing:(pq[i]||{}).missing||"",improved:(pq[i]||{}).improved||"",type:t.type,origin:t.kind==="followup"?"followup":t.origin,basis:t.basis,srcId:t.kind==="followup"?"":t.srcId})),
-   cv:r.cv||{},roleFitNote:r.roleFit||"",domainNote:r.domainKnowledge||"",commNote:r.communication||"",revision:r.revision||[],plan:r.plan||[],voice:true,usedCv:true,
+   turns:s.turns,overall:st.overall,dims:st.dims,summary:r.summary||"",strengths:r.strengths||[],improvements:r.improvements||[],missed:r.missedOpportunities||[],notAssessed:(r.notAssessed||[]).slice(0,6),strict:{v:2,notes:st.notes.slice(0,20),aiOverall:Math.round(+r.overall||0)},
+   perQuestion:s.turns.map((t,i)=>({question:t.q,score:st.pq[i].score,worked:st.pq[i].worked,missing:st.pq[i].missing,improved:st.pq[i].improved,quote:st.pq[i].quote,words:st.pq[i].checks.words,type:t.type,origin:t.kind==="followup"?"followup":t.origin,basis:t.basis,srcId:t.kind==="followup"?"":t.srcId})),
+   cv:hasCv?(r.cv||{}):{},roleFitNote:r.roleFit||"",domainNote:r.domainKnowledge||"",commNote:r.communication||"",revision:r.revision||[],plan:r.plan||[],voice:true,usedCv:hasCv,
    research:{company:s.company,evidence:R_.evidence||"none",match:R_.match||"none",sources:R_.sources||[],hasBrief:!!R_.brief,planAi:!!s.planAi,cvAi:!!(cvA&&cvA.viaAi),origins:planSummary(s.plan||[])}};
   S.reports.unshift(rep);s.status="done";s.reportId=rep.id;save();go("/reports/"+rep.id)}
- catch(e){room.innerHTML=`<div class="stack" style="padding:20px 0"><div class="note bad" role="alert"><b>Your interview is saved, but it could not be scored.</b> ${esc(aiMsg(e))}</div><div class="row"><button class="btn pri" data-act="vretryfin">Try scoring again</button>${A("/interviews","Back to interviews","btn ghost")}</div><p class="small muted">${n} answer${n==1?"":"s"} captured over ${fmtClock(s.elapsed)}. Scoring needs Claude access, which is not available right now.</p></div>`}}
+ catch(e){room.innerHTML=`<div class="stack" style="padding:20px 0"><div class="note bad" role="alert"><b>Your interview is saved, but it could not be scored.</b> ${esc(aiMsg(e))}</div><div class="row"><button class="btn pri" data-act="vretryfin">Try scoring again</button>${A("/interviews","Back to interviews","btn ghost")}</div><p class="small muted">${n} answer${n==1?"":"s"} captured over ${fmtClock(s.elapsed)}. Scoring needs the AI service, which is not available right now. No score is shown rather than an invented one.</p></div>`}}
+ACT.sitnew=()=>{SU.v={};SU.prep=null;SU.pendingRound=SIT_ROUND;go("/interviews/new")};
 ACT.vretryfin=()=>{const G=window.__G;if(G)doFinish(G.s,$("#vroom"))};
 </script>

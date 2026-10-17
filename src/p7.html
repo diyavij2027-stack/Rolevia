@@ -96,7 +96,7 @@ function lineChart(pts){if(pts.length<1)return"";const W=640,H=220,L=36,B=28,T=1
  const line=pts.map((p,i)=>`${i?"L":"M"}${x(i)},${y(p.v)}`).join(" ");
  return`<div class="tablewrap"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Readiness score over time" style="min-width:420px;width:100%;height:auto">${grid}<path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>${pts.map((p,i)=>`<circle cx="${x(i)}" cy="${y(p.v)}" r="4.5" fill="var(--accent)"/><text x="${x(i)}" y="${H-8}" text-anchor="middle" font-size="10" fill="var(--muted)">${esc(p.l)}</text>`).join("")}</svg></div>`}
 R(/^\/progress$/,()=>{const rs=[...S.reports].reverse(),gd=S.gdReports.filter(r=>!r.limited&&r.criteria);
- const dimAvg=DIMS.map(([k,l])=>[l,avg(rs.map(r=>+r.dims[k]).filter(x=>x>=0))]);
+ const dimAvg=DIMS.map(([k,l])=>[l,avg(rs.map(r=>r.dims[k]).filter(x=>x!=null&&isFinite(+x)).map(Number))]).filter(x=>x[1]!=null&&!isNaN(x[1]));
  const miss={};S.reports.forEach(r=>(r.revision||[]).forEach(t=>{const k=String(t).trim();miss[k]=(miss[k]||0)+1}));const topics=Object.entries(miss).sort((a,b)=>b[1]-a[1]).slice(0,6);
  const gdPts=gd.slice().reverse().map(r=>({l:fmtDate(r.date).slice(0,6),v:avg(r.criteria.map(c=>c.score).filter(x=>x!=null))})).filter(p=>p.v!=null);
  return{private:true,nav:"/progress",title:"Progress",html:`${head("Progress","Built only from your saved sessions.")}
