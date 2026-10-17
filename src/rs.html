@@ -1,0 +1,70 @@
+<script>
+/* ---------- Company research packs: hand-collected from public pages, each item carries its source ----------
+   Evidence is anecdotal (individual candidate reports and third-party guides). Nothing here is an official company statement.
+   retrieved: 2026-10-17. Role tags: tech, mgmt (management trainee / manager), sales, marketing, consulting, ops, finance, hr, any. */
+const RETRIEVED="17 Oct 2026";
+const PACKS=[
+ {id:"tata-steel",name:"Tata Steel",aka:["tata steel","tsl"],industry:"Manufacturing & Steel",
+  sources:[{id:"s1",title:"GeeksforGeeks: Tata Steel Management Trainee (Systems), on-campus",url:"https://geeksforgeeks.org/tata-steel-interview-experience-for-management-trainee-systems-on-campus",kind:"candidate report"},{id:"s2",title:"Glassdoor: Tata Steel interview reports (Assistant Manager)",url:"https://www.glassdoor.co.in/Interview/Tata-Steel-Interview-E38323-RVW80371013.htm",kind:"candidate reports"}],
+  process:[{role:"tech",src:"s1",text:"Management Trainee (Systems), campus: online test (aptitude, one coding problem, technical MCQs), then a group discussion with about 2 minutes per candidate (topic: use of IT in manufacturing), then a ~45-minute technical interview, then HR."},{role:"mgmt",src:"s2",text:"Assistant Manager reports (2023-2025): a written elimination test at some sites, a group discussion, a technical interview with subject-matter experts, then HR. One interview covered job responsibilities, KPIs/KRAs, span of control and reporting lines."}],
+  reported:[{role:"tech",src:"s1",q:"Describe your project in detail. How would you design a website for Tata Steel, and how would you add AI features to it?"},{role:"tech",src:"s1",q:"Are you willing to relocate, and how quickly can you learn a new technology stack?"},{role:"mgmt",src:"s2",q:"Walk me through your core job responsibilities, KPIs and KRAs, and the technical and functional areas you work on."},{role:"mgmt",src:"s2",q:"What inventory handling methods do you know, and how does the procure-to-pay cycle work?"}],
+  patterns:[{role:"any",src:"s1",text:"Questions go deep into the candidate's own projects and core subject before any generic HR."},{role:"mgmt",src:"s2",text:"Interviewers ask about measurable responsibility: KPIs, span of control, MIS reports, system familiarity (SAP)."},{role:"any",src:"s1",text:"Willingness to relocate and work at plant locations is checked."}],
+  strength:"limited"},
+ {id:"jsw-steel",name:"JSW Steel",aka:["jsw steel","jsw"],industry:"Manufacturing & Steel",
+  sources:[{id:"s1",title:"Glassdoor: JSW Steel interview reports (Junior Manager, Vijayanagar)",url:"https://www.glassdoor.com.au/Interview/JSW-Steel-Interview-E41928-RVW25183274.htm",kind:"candidate reports"}],
+  process:[{role:"ops",src:"s1",text:"Junior Manager (electrical, mechanical, metallurgy), 2019-2020 reports: aptitude and technical test, then domain technical interview, then HR; one report describes a plant interview at the Vijayanagar works."}],
+  reported:[{role:"ops",src:"s1",q:"Tell me about your recent project, and your PG and UG projects."},{role:"ops",src:"s1",q:"Are you comfortable with the plant location?"},{role:"any",src:"s1",lit:false,q:"Questions on technical knowledge, family and attitude were also reported."}],
+  patterns:[{role:"ops",src:"s1",text:"Technical depth in the candidate's own discipline, plus a direct check of plant-location comfort."}],strength:"limited"},
+ {id:"puma",name:"Puma",aka:["puma","puma se"],industry:"Retail & Apparel",
+  sources:[{id:"s1",title:"Glassdoor: PUMA interview reports (interns, Germany)",url:"https://www.glassdoor.co.in/Interview/PUMA-Interview-E10474-RVW84821815.htm",kind:"candidate reports"},{id:"s2",title:"AmbitionBox: PUMA Sales Promoter interview (India)",url:"https://www.ambitionbox.com/interviews/puma-interview-questions/sales-promoter",kind:"candidate report"}],
+  process:[{role:"marketing",src:"s1",text:"Intern reports (Germany, 2024-2025): casual interview of 15-30 minutes with the manager and team, resume walk-through, and in one case a second round with a case study."},{role:"sales",src:"s2",text:"Sales Promoter (India, Nov 2024): a single HR round."}],
+  reported:[{role:"marketing",src:"s1",q:"Walk us through your resume and tell us about your experiences."},{role:"marketing",src:"s1",q:"How do you resolve conflicts you are not clear about?"},{role:"marketing",src:"s1",q:"Are you into sport?"},{role:"sales",src:"s2",q:"What do you know about the Puma brand? How would you grow sales?"},{role:"sales",src:"s2",q:"How many years of retail experience do you have, and why are you leaving your present job?"}],
+  patterns:[{role:"marketing",src:"s1",text:"Conversational, resume-led interviews that test motivation for the brand and interest in sport; reviewers advise knowing Puma's history and recent work."}],strength:"limited"},
+ {id:"deloitte",name:"Deloitte",aka:["deloitte","deloitte india","deloitte usi"],industry:"Consulting",
+  sources:[{id:"s1",title:"GeeksforGeeks: Deloitte India on-campus 2024 (Analyst)",url:"https://geeksforgeeks.org/deloitte-india-interview-experience-on-campus-2024",kind:"candidate report"},{id:"s2",title:"Glassdoor: Deloitte Analyst interview report",url:"https://www.glassdoor.co.in/Interview/Deloitte-Interview-E2763-RVW4881008.htm",kind:"candidate reports"}],
+  process:[{role:"consulting",src:"s1",text:"2024 campus (Analyst): 60-minute online test (cognitive plus technical MCQs), then a group case discussion (groups of 7-9, one moderator; the case was improving sales for an automobile company), then a resume-based interview."},{role:"consulting",src:"s2",text:"Older and other Analyst reports: written test, case study (one was pharma), group discussion with eliminations, resume interview that can include puzzles; a recorded HireVue behavioural round is also reported."}],
+  reported:[{role:"any",src:"s1",q:"Introduce yourself, then explain the projects and skills listed on your resume."},{role:"consulting",src:"s2",lit:false,q:"Puzzles to test analytical thinking were reported; the wording was not given."}],
+  patterns:[{role:"any",src:"s1",text:"The final interview is built from the resume: candidates are expected to defend every project and skill they list."},{role:"consulting",src:"s1",text:"A structured case discussion in a group comes before the interview."}],strength:"moderate"},
+ {id:"hul",name:"Hindustan Unilever",aka:["hindustan unilever","hul","unilever"],industry:"FMCG",
+  sources:[{id:"s1",title:"AmbitionBox: Hindustan Unilever interview reports (Associate Manager)",url:"https://www.ambitionbox.com/interviews/hindustan-unilever-interview-questions/associate-manager",kind:"candidate report"},{id:"s2",title:"Glassdoor: Unilever placement-student interview reports (not India-specific)",url:"https://www.glassdoor.ie/Interview/Unilever-Interview-E3513-RVW102646497.htm",kind:"candidate reports"}],
+  process:[{role:"mgmt",src:"s1",text:"Associate Manager (one report, Jan 2023): resume shortlist, a 10-minute group discussion on a trending general-knowledge topic, then a one-on-one covering introduction, expectations, a case-based situation and brand knowledge."}],
+  reported:[{role:"any",src:"s1",q:"Who are you? Where do you see yourself in five years?"},{role:"any",src:"s2",q:"Walk me through an experience of tackling a daunting project."},{role:"any",src:"s2",q:"Describe an experience outside work or academia where you learnt a new skill."}],
+  patterns:[{role:"mgmt",src:"s1",text:"Case-based situations and awareness of the company's brands are part of the one-on-one."}],strength:"limited"},
+ {id:"amazon",name:"Amazon",aka:["amazon","amazon india"],industry:"E-commerce",
+  sources:[{id:"s1",title:"ClavePrep: Amazon interview preparation India 2026 (third-party guide, no candidate-report citations)",url:"https://claveprep.com/blog/amazon-interview-preparation-india-2026",kind:"third-party guide"}],
+  process:[{role:"any",src:"s1",text:"A third-party guide describes an online assessment (with a work-style section tied to the Leadership Principles), a recruiter screen, a phone or video screen, a loop of several interviews where each interviewer owns specific Leadership Principles, and a Bar Raiser interviewer from outside the hiring team. These details are unverified."}],
+  reported:[],
+  patterns:[{role:"any",src:"s1",text:"Behavioural questions are mapped to Leadership Principles such as Ownership, Dive Deep, Bias for Action, Have Backbone and Disagree and Commit, with repeated follow-ups on what the candidate personally did."}],strength:"limited"},
+ {id:"flipkart",name:"Flipkart",aka:["flipkart"],industry:"E-commerce",
+  sources:[{id:"s1",title:"Hyring: Flipkart interview process (third-party summary citing Glassdoor reports)",url:"https://hyring.com/jobseeker-toolkit/interview-questions/company/flipkart",kind:"third-party guide"}],
+  process:[{role:"any",src:"s1",text:"A third-party summary says public reports describe 3 to 5 rounds that depend on the role: a screen, a skills test or role task, product or data-and-business rounds (metrics, marketplace and category cases, trade-offs), then hiring manager and HR."}],
+  reported:[],patterns:[{role:"marketing",src:"s1",text:"For business, category and marketing roles, the summary points to P&L thinking, customer behaviour, business metrics and stakeholder examples. It lists no actual reported questions."}],strength:"limited"},
+ {id:"accenture",name:"Accenture",aka:["accenture","accenture india"],industry:"Consulting",
+  sources:[{id:"s1",title:"Glassdoor: Accenture Associate Software Engineer interview reports (India and Philippines)",url:"https://www.glassdoor.fr/Entretien/Accenture-Entretien-E4138-RVW82258502.htm",kind:"candidate reports"}],
+  process:[{role:"tech",src:"s1",text:"India reports describe about four rounds: aptitude and technical MCQs, coding, a communication round, and HR."}],
+  reported:[{role:"tech",src:"s1",lit:false,q:"Questions on the resume and its projects plus data structures and programming fundamentals were reported."},{role:"any",src:"s1",q:"Tell us about a group project, how you handled conflict, and what you learned and implemented."},{role:"any",src:"s1",q:"HR: your strengths and weaknesses, and where you see yourself in five years."}],
+  patterns:[{role:"tech",src:"s1",text:"Resume and project questions come alongside core technical fundamentals."}],strength:"limited"}
+];
+const ROLE_TAGS={"Marketing":["marketing","sales"],"Sales":["sales","marketing"],"Finance":["finance"],"Consulting":["consulting"],"Product Management":["tech","marketing"],"Operations":["ops","mgmt"],"Technology":["tech"],"Human Resources":["hr","mgmt"],"Data & Analytics":["tech","consulting"]};
+const normName=s=>String(s||"").toLowerCase().replace(/[^a-z0-9 ]+/g," ").replace(/\s+/g," ").trim();
+function findPack(company){const n=normName(company);if(!n)return null;return PACKS.find(p=>p.aka.some(a=>n===a||n.startsWith(a+" ")))||null}
+/* local relevance logic: which pack items apply to the chosen role */
+function packFor(company,role){const p=findPack(company);if(!p)return null;const tags=ROLE_TAGS[role]||[];const fit=x=>x.role==="any"||tags.includes(x.role);
+ const direct=a=>a.filter(x=>x.role!=="any"&&tags.includes(x.role)),use=a=>a.filter(fit);
+ const items={process:use(p.process),reported:use(p.reported),patterns:use(p.patterns)};
+ const hasDirect=direct(p.process).length+direct(p.reported).length+direct(p.patterns).length>0;
+ const anyRep=p.reported.filter(x=>x.role==="any").length>0;
+ const match=hasDirect?"direct":(items.process.length+items.reported.length+items.patterns.length>0?"adjacent":"none");
+ const srcOf=id=>p.sources.find(s=>s.id===id);
+ const otherRoles=[...new Set([...p.process,...p.reported,...p.patterns].map(x=>x.role).filter(r=>r!=="any"&&!tags.includes(r)))];
+ return{pack:p,items,match,srcOf,otherRoles,evidence:hasDirect&&p.strength!=="limited"?"moderate":hasDirect?"limited":"adjacent only"}}
+/* AI research brief for companies or roles the packs do not cover; clearly labelled as general knowledge */
+const RS_KEY=(c,r,d)=>normName(c)+"|"+normName(r)+"|"+normName(d);
+async function researchBrief(sel,pf){S.research=S.research||{};const key=RS_KEY(sel.company,sel.role,sel.domain);const c=S.research[key];if(c&&Date.now()-c.at<30*864e5)return c;
+ const known=pf?JSON.stringify({process:pf.items.process.map(x=>x.text),patterns:pf.items.patterns.map(x=>x.text)}).slice(0,2500):"none";
+ const r=await ai(`You are preparing a recruiter-style briefing for a mock interview. Company: ${sel.company||"(not specified)"}. Domain/industry: ${sel.domain}. Role: ${sel.role}. Level: ${sel.level}. Round: ${sel.round}.
+Publicly sourced notes already collected (verified by a person, anecdotal): ${known}.
+Write from your general knowledge ONLY what you reasonably know, and say so when unsure. NEVER invent past interview questions or claim any question was asked by this company. Describe: what this role/function typically does at a company like this, what competencies hiring panels in this domain assess, domain topics a candidate should know, and company-specific angles (business model, products, current priorities) you are reasonably confident about. Mark each company fact as "known" or "inferred".
+Reply with only JSON: {"roleReality":"2-3 sentences","competencies":["..."],"domainTopics":["specific topics to probe"],"companyAngles":[{"point":"","confidence":"known|inferred"}],"stylesOfQuestioning":["how interviewers in this domain probe, e.g. case, project deep-dive"],"caution":"one sentence on what you are unsure about"}`,{tier:"default",cache:false});
+ if(!r||!Array.isArray(r.competencies))throw{code:"invalid_json"};const out={...r,at:Date.now()};S.research[key]=out;save();return out}
+</script>

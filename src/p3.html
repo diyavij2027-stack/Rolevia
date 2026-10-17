@@ -1,0 +1,102 @@
+<script>
+/* ---------- shared company search box ---------- */
+function searchBox(id,ph){return `<form data-form="search" class="row" style="position:relative;gap:8px;flex-wrap:nowrap" role="search"><div style="position:relative;flex:1;min-width:0"><label class="sr" for="${id}" style="position:absolute;left:-9999px">Company name</label><input id="${id}" name="q" autocomplete="off" placeholder="${esc(ph||"Search any company, e.g. Puma, BCG, a startup")}" data-suggest><div class="suggest" hidden></div></div><button class="btn blue" type="submit">Search</button></form>`}
+FORM.search=(f,d)=>{const q=(d.q||"").trim();if(!q){toast("Type a company name first");return}go("/search/"+encodeURIComponent(q))};
+document.addEventListener("input",e=>{const i=e.target.closest("[data-suggest]");if(!i)return;const box=i.parentElement.querySelector(".suggest");const r=suggest(i.value);
+ if(!r.length){box.hidden=true;return}box.hidden=false;box.innerHTML=r.map(x=>`<a href="#/search/${encodeURIComponent(x.n)}"><span>${esc(x.n)}</span><span class="muted small">${esc(x.i)}</span></a>`).join("")});
+document.addEventListener("click",e=>{if(!e.target.closest("[data-suggest],.suggest"))$$(".suggest").forEach(b=>b.hidden=true)});
+
+/* ---------- landing ---------- */
+R(/^\/$/,()=>({title:"",lp:true,html:`
+<section class="hero" style="margin-top:8px">
+ <div class="panel notch stack lg" style="padding:36px 32px">
+  <span class="eyebrow" style="color:#C9CBFF">AI interview intelligence</span>
+  <h1 style="font-size:clamp(34px,6.4vw,60px)">Know the company.<br><span style="color:var(--lav)">Prepare for the role.</span><br>Own the room.</h1>
+  <p style="font-size:17px;max-width:46ch;color:#DCDDFF">Company-specific interview preparation, an AI interviewer that adapts to your answers, and live group discussions with real candidates.</p>
+  <div class="row"><a class="btn lav" href="#/signup">Start Preparing</a><a class="btn" style="background:transparent;color:#fff;box-shadow:inset 0 0 0 1.5px #fff" href="#/companies">Explore Companies</a></div>
+ </div>
+ <div class="card stack" style="justify-content:center;padding:26px">
+  <h3>Search any company</h3>
+  <p class="muted small">Popular names autocomplete. Anything else is researched on demand, with its limits stated.</p>
+  ${searchBox("hs")}
+  <div class="chips">${["Puma","BCG","Deloitte","Amazon"].map(c=>`<a class="chip" style="text-decoration:none" href="#/search/${c}">${c}</a>`).join("")}</div>
+ </div>
+</section>
+
+<section style="margin-top:56px" class="stack lg">
+ <div class="pagehead"><span class="eyebrow">Two ways to practise</span><h2>The interviewer and the room</h2></div>
+ <div class="grid g2">
+  <a class="card stack" href="#/interviews/new"><span class="pill" style="align-self:flex-start">AI mock interviews</span><h3>A spoken interview, one question at a time</h3><p class="muted">Pick a company, role and round. The AI interviewer speaks, listens to your spoken answers, and probes the weak spots. You get a scored report with better-answer suggestions.</p><span class="btn pri sm" style="align-self:flex-start">Set up an interview</span></a>
+  <a class="card stack" href="#/gd"><span class="pill" style="align-self:flex-start">Live GD Arena</span><h3>Group discussions with real candidates</h3><p class="muted">Book a slot, wait in the lobby, discuss in real time. Feedback is based on what each person actually said, not on who spoke the most.</p><span class="btn pri sm" style="align-self:flex-start">See GD sessions</span></a>
+ </div>
+</section>
+
+<section style="margin-top:56px" class="stack lg">
+ <div class="pagehead"><span class="eyebrow">What you get</span><h2>Three reports, one place</h2><p class="muted">Layout previews only. ROLEVIA shows no sample scores because every figure in your account comes from your own sessions.</p></div>
+ <div class="grid g3">
+  <div class="card stack"><h4>Company intelligence</h4><div class="kv small"><span class="muted">Overview</span><span>Business model, products, competitors</span><span class="muted">Culture</span><span>Stated values, with labels</span><span class="muted">Hiring</span><span>Process and rounds, where known</span><span class="muted">Role prep</span><span>Adapts to Marketing, Finance, Tech…</span></div><span class="pill ai" style="align-self:flex-start">Every item labelled by evidence</span></div>
+  <div class="card stack"><h4>Interview feedback</h4>${["Communication & clarity","Relevance & depth","Structured thinking","Role knowledge","Problem solving"].map(x=>`<div><div class="row between small"><span>${x}</span><span class="muted">–</span></div><div class="bar"><i style="width:0"></i></div></div>`).join("")}</div>
+  <div class="card stack"><h4>GD performance</h4><div class="kv small"><span class="muted">Relevance</span><span>Scored with quoted evidence</span><span class="muted">Listening</span><span>Did you build on others?</span><span class="muted">Balance</span><span>Speaking more is not rewarded</span></div><p class="small muted">Private to you. Mock rankings are labelled as practice.</p></div>
+ </div>
+</section>
+
+<section style="margin-top:56px" class="stack lg">
+ <div class="pagehead"><span class="eyebrow">How it works</span><h2>Four steps</h2></div>
+ <div class="grid g3">${[["Search a company","Any name works, including startups."],["Pick the role","Content changes for Finance versus Marketing."],["Practise","AI interviews and live GDs."],["Review","Reports, progress and a revision plan."]].map(([a,b],i)=>`<div class="card"><h4>${a}</h4><p class="muted small" style="margin-top:6px">${b}</p></div>`).join("")}</div>
+ <div>${A("/how-it-works","Read the details","btn ghost sm")}</div>
+</section>
+
+<section style="margin-top:56px" class="stack lg">
+ <div class="pagehead"><span class="eyebrow">Pricing preview</span><h2>Start free</h2><p class="muted">Proposed prices to test, not validated market rates.</p></div>
+ <div class="grid g3">${PLANS_ASC.filter(x=>["free","premium","pro"].includes(x.id)).map(p=>`<div class="card stack"><h4>${p.name}</h4><div><span class="score" style="font-size:34px">${p.price}</span><span class="muted">${p.per}</span></div><p class="small muted">${p.feats[0]}</p></div>`).join("")}</div>
+ <div>${A("/pricing","Compare all plans","btn pri sm")}</div>
+</section>`}));
+
+/* ---------- static info pages ---------- */
+const info=(title,eyebrow,body)=>({title,html:`<div style="max-width:760px;margin-top:12px" class="stack lg"><div class="pagehead"><span class="eyebrow">${eyebrow}</span><h2>${title}</h2></div>${body}</div>`});
+R(/^\/features$/,()=>info("Features","Product",`<div class="grid g2">${[["Company intelligence","/companies","Profiles for any company with sources, labels and confidence."],["AI mock interviews","/interviews","A voice interview with spoken follow-ups, a timer and a saved report."],["Question Explorer","/questions","Filter, bookmark and turn questions into a mock."],["GD Arena","/gd","Book and join live discussions with real candidates."],["Job opportunities","/jobs","Search routes to official and public listing sites."],["Progress","/progress","Charts built only from your saved sessions."]].map(([a,h,b])=>`<a class="card stack" href="#${h}"><h4>${a}</h4><p class="muted small">${b}</p></a>`).join("")}</div>`));
+R(/^\/how-it-works$/,()=>info("How it works","Product",`<div class="stack">${[["1. Research the company","Search a name. ROLEVIA builds a profile and labels each part as verified, reported, or AI-generated."],["2. Choose a role","Practice questions and skill lists change with the role you pick."],["3. Run a mock interview","The AI asks one question at a time and follows up on thin answers."],["4. Join a GD","Book a slot and discuss with other candidates. Feedback quotes your own contributions."],["5. Review and repeat","Reports and progress charts come from your saved sessions only."]].map(([a,b])=>`<div class="card"><h4>${a}</h4><p class="muted" style="margin-top:4px">${b}</p></div>`).join("")}</div><div>${A("/signup","Start Preparing","btn pri")}</div>`));
+R(/^\/about$/,()=>info("About","Company",`<p>ROLEVIA helps candidates prepare for interviews with company-specific research, an AI interviewer and live group discussions. The aim is to be useful to students, graduates and working professionals, and credible to placement cells.</p><p class="muted">ROLEVIA does not predict hiring decisions and does not guarantee shortlisting. Readiness scores measure practice performance only.</p>`));
+R(/^\/contact$/,()=>info("Contact","Company",`<div class="note info">No public contact channel has been configured for this deployment yet. The site owner should add a support address and a placement-cell enquiry form before launch.</div><p class="muted">Until then, use ${A("/help","Help","")} for answers to common questions.</p>`));
+R(/^\/help$/,()=>info("Help","Support",`<div class="stack">${[["Why is a company profile marked AI-generated?","ROLEVIA has no live interview-review feed connected. When no verified source exists, the profile is written by Claude from general knowledge and labelled so."],["Can I use voice?","AI mock interviews are voice-only: the interviewer speaks and you answer out loud, so you need a microphone, speakers and a browser with speech recognition (Chrome, Edge or Safari). Group GD sessions take place on a live video call in a public meeting room (or a Meet, Zoom or Teams link your group shares), while ROLEVIA shows the topic and timer and captures your speech for feedback."],["Where is my data?","Your profile, reports and CV details stay in this browser. Use Account Settings to export or delete them."],["Are payments live?","No. A payment gateway has not been configured, so no plan can be purchased yet."]].map(([a,b])=>`<div class="card"><h4>${a}</h4><p class="muted" style="margin-top:4px">${b}</p></div>`).join("")}</div>`));
+R(/^\/privacy$/,()=>info("Privacy Policy","Legal",`<div class="note">Draft summary for this build. Have it reviewed against your launch jurisdiction (India's DPDP Act in particular) before publishing.</div><div class="stack"><p><b>What stays in your browser.</b> Your profile, CV fields, bookmarks, interview transcripts and reports are stored locally. They are not sent to ROLEVIA servers because none are connected.</p><p><b>What is sent to Claude.</b> When you use an AI feature, the text needed for that task (company, role, your answers, CV fields if you enable them) is sent to Claude on your own account.</p><p><b>Group discussions.</b> GD messages are shared with the other participants in your session through the platform's real-time channel and are not recorded to a database. You are asked to consent before joining.</p><p><b>Deletion.</b> Account Settings lets you delete all local data.</p></div>`));
+R(/^\/terms$/,()=>info("Terms","Legal",`<div class="note">Draft summary for this build. Have it reviewed before launch.</div><div class="stack"><p>ROLEVIA is a practice tool. Scores, rankings and feedback are not predictions of any employer's decision.</p><p>AI-generated content may be wrong. Verify company facts on official sources.</p><p>Be respectful in group discussions. Participants can be reported and removed.</p></div>`));
+
+/* ---------- auth ---------- */
+const authNote=`<div class="note info small">Email and password sign-in needs an authentication backend such as Supabase, which is not configured here. Until then, ROLEVIA creates a local profile in this browser. No password is collected or stored.</div>`;
+const authCard=(t,s,b)=>({title:t,html:`<div style="max-width:460px;margin:24px auto" class="stack lg"><div class="pagehead"><h2>${t}</h2><p class="muted">${s}</p></div><div class="card stack">${b}</div></div>`});
+R(/^\/signup$/,()=>authCard("Create your profile","Free to start. No documents required.",`${authNote}
+<form data-form="signup" class="stack" novalidate><div class="field"><label for="n">Full name</label><input id="n" name="name" autocomplete="name" required></div><div class="field"><label for="e">Email</label><input id="e" name="email" type="email" autocomplete="email" required></div><label class="row small" style="font-weight:400"><input type="checkbox" name="t" style="width:auto;min-height:0"> I agree to the ${A("/terms","Terms")} and ${A("/privacy","Privacy Policy")}</label><div class="err" id="serr" role="alert"></div><button class="btn pri" type="submit">Create profile</button></form><p class="small muted">Already have one? ${A("/login","Sign in")}</p>`));
+FORM.signup=(f,d)=>{const n=(d.name||"").trim(),e=(d.email||"").trim().toLowerCase(),er=$("#serr");
+ if(n.length<2)return er.textContent="Enter your full name.";if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e))return er.textContent="Enter a valid email address.";if(!d.t)return er.textContent="Accept the Terms and Privacy Policy to continue.";
+ S.account={name:n,email:e,created:Date.now()};S.user=S.account;save();go("/verify-email")};
+R(/^\/login$/,()=>authCard("Sign in","Welcome back.",`${authNote}
+<form data-form="login" class="stack" novalidate><div class="field"><label for="e">Email</label><input id="e" name="email" type="email" autocomplete="email" required></div><div class="err" id="lerr" role="alert"></div><button class="btn pri" type="submit">Sign in</button></form><p class="small">${A("/forgot","Forgot password?")} · ${A("/signup","Create a profile")}</p>`));
+FORM.login=(f,d)=>{const e=(d.email||"").trim().toLowerCase(),er=$("#lerr");if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e))return er.textContent="Enter a valid email address.";
+ if(!S.account||S.account.email!==e)return er.textContent="No profile for that email in this browser. Create one first.";
+ S.user=S.account;save();const n=S.next;S.next=null;go(n||"/dashboard")};
+R(/^\/forgot$/,()=>authCard("Forgot password","Reset links need an email service.",`<div class="note">Password reset is unavailable. This deployment has no authentication backend or email provider configured, and local profiles have no password to reset.</div><p>${A("/login","Back to sign in","btn ghost sm")} ${A("/signup","Create a profile","btn ghost sm")}</p>`));
+R(/^\/verify-email$/,()=>authCard("Verify your email","Verification is not available yet.",`<div class="note">Email verification needs an email provider that has not been configured, so your profile is active without it.</div><p>${A(S.profile.level?"/dashboard":"/onboarding","Continue","btn pri")}</p>`));
+
+/* ---------- onboarding ---------- */
+const chipGroup=(name,opts,sel)=>`<div class="chips" data-group="${name}">${opts.map(o=>`<button type="button" class="chip" data-act="chip" aria-pressed="${sel.includes(o)}">${esc(o)}</button>`).join("")}</div>`;
+ACT.chip=t=>{t.setAttribute("aria-pressed",t.getAttribute("aria-pressed")==="true"?"false":"true")};
+R(/^\/onboarding$/,()=>{const p=S.profile;return{private:true,nav:"/settings",title:"Onboarding",html:`${head("Tell us what you are preparing for","Everything here is optional except your level. You can change it later.")}
+<form data-form="onboard" class="stack lg card" novalidate>
+<div class="field"><label for="lv">Education or experience level <span class="small" style="color:var(--bad)">(required)</span></label><div class="err" id="lverr" role="alert"></div><select id="lv" name="level" aria-describedby="lverr"><option value="">Select…</option>${LEVELS.map(l=>`<option ${p.level===l?"selected":""}>${l}</option>`).join("")}</select></div>
+<div><label>Target roles</label>${chipGroup("roles",ROLES,p.roles)}</div>
+<div><label>Preferred industries</label>${chipGroup("industries",INDUSTRIES,p.industries)}</div>
+<div><label>Preparation goals</label>${chipGroup("goals",["Campus placement","Switch jobs","Consulting interviews","Group discussions","Case practice","Build confidence"],p.goals)}</div>
+<div class="field"><label for="tg">Target companies (comma separated)</label><input id="tg" name="targets" value="${esc(p.targets.join(", "))}" placeholder="Puma, Deloitte, Tata Steel"></div>
+<div class="note info small">Want personalised questions from your CV? Upload it later in ${A("/cv","My CV")}. Nothing is uploaded here.</div>
+<div class="err" id="oerr" role="alert"></div><div class="row"><button class="btn pri" type="submit" id="obtn">Save and go to dashboard</button></div></form>`}});
+FORM.onboard=(f,d)=>{const lerr=$("#lverr"),oerr=$("#oerr");lerr.textContent="";oerr.textContent="";
+ if(!d.level){lerr.textContent="Choose your education or experience level. It is the only required field.";oerr.textContent="Missing: education or experience level.";const lv=$("#lv");lv.focus();lv.scrollIntoView&&lv.scrollIntoView({block:"center"});return}
+ const g=n=>$$(`[data-group="${n}"] [aria-pressed="true"]`,f).map(b=>b.textContent);
+ const next={level:d.level,roles:g("roles"),industries:g("industries"),goals:g("goals"),targets:(d.targets||"").split(",").map(s=>s.trim()).filter(Boolean).slice(0,12)};
+ const prev=S.profile;S.profile=next;
+ try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){/* storage blocked: stay in memory for this session */}
+ mem=S;
+ if(JSON.stringify(S.profile)!==JSON.stringify(next)){S.profile=prev;oerr.textContent="Could not save your preferences. Try again.";return}
+ toast("Preferences saved");go("/dashboard")};
+</script>

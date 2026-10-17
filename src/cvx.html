@@ -1,0 +1,93 @@
+<script>
+/* ---------- CV analysis, interview planning ---------- */
+const MONTHS="jan feb mar apr may jun jul aug sep oct nov dec".split(" ");
+const mIdx=(m,y)=>{y=+y;if(y<100)y+=2000;return y*12+MONTHS.indexOf(String(m).slice(0,3).toLowerCase())};
+const mLabel=i=>MONTHS[i%12][0].toUpperCase()+MONTHS[i%12].slice(1)+" "+Math.floor(i/12);
+function cvSectionsFull(text){const H={education:/^(education|academics?|academic (background|qualifications?)|qualifications?)\b/i,experience:/^(work |professional |internship )?(experience|employment|work history|internships?)\b/i,skills:/^(technical |core |key )?(skills|competencies|tools|technologies)\b/i,projects:/^(academic |key |personal )?projects\b/i,certifications:/^(certifications?|courses|licen[cs]es|training)\b/i,achievements:/^(achievements?|awards|honou?rs|accomplishments|positions of responsibility|extra.?curriculars?|leadership)\b/i};
+ const out={education:[],experience:[],skills:[],projects:[],certifications:[],achievements:[]};let cur=null;
+ for(const raw of text.split("\n")){const l=raw.trim();if(!l)continue;const head=l.replace(/[:\-–—|]+$/,"").trim();let hit=null;if(head.length<42)for(const k in H)if(H[k].test(head)){hit=k;break}
+  if(hit){cur=hit;continue}if(cur)out[cur].push(l.replace(/^[•\-*▪●◦]\s*/,""))}
+ return out}
+function cvDates(text){const iv=[];const mon="(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?[\\s,'’-]*(\\d{2,4})";
+ const nowI=new Date().getFullYear()*12+new Date().getMonth();
+ for(const l of text.split("\n")){let m,re=new RegExp(mon+"\\s*(?:-|–|—|to)\\s*(?:(present|current|now|till date)|"+mon+")","gi"),got=false;
+  while((m=re.exec(l))){got=true;const s=mIdx(m[1],m[2]);const e=m[3]?nowI:mIdx(m[4],m[5]);if(e>=s&&s>2000*12)iv.push([s,e,l.trim()])}
+  if(!got){re=/\b((?:19|20)\d{2})\s*(?:-|–|—|to)\s*((?:19|20)\d{2}|present|current|now)\b/gi;while((m=re.exec(l))){const s=+m[1]*12,e=/^\d/.test(m[2])?+m[2]*12+11:nowI;if(e>=s)iv.push([s,e,l.trim()])}}}
+ return iv}
+function cvSignals(text,fields){const sec=cvSectionsFull(text),lines=text.split("\n").map(x=>x.trim()).filter(Boolean);
+ const iv=cvDates(text).sort((a,b)=>a[0]-b[0]);const gaps=[];let maxEnd=null;
+ for(const [s,e] of iv){if(maxEnd!==null&&s-maxEnd>6)gaps.push({from:mLabel(maxEnd),to:mLabel(s),months:s-maxEnd-1});if(maxEnd===null||e>maxEnd)maxEnd=e}
+ const metricRe=/\d+\s*%|₹\s?\d|rs\.?\s?\d|\$\s?\d|\b\d+(?:\.\d+)?\s?(?:x|k|lakhs?|crores?|cr|million|mn|bn)\b|\b(?:increas|reduc|grew|saved|improv|boost)\w*/i;
+ const metricClaims=lines.filter(l=>l.length>20&&metricRe.test(l)).slice(0,12);
+ const claimRe=/\b(led|lead|managed|spearheaded|founded|co-founded|headed|owned|built|launched|drove|negotiated|achieved|ranked|won|top \d+)\b/i;
+ const responsibilityClaims=lines.filter(l=>l.length>20&&claimRe.test(l)).slice(0,12);
+ const work=[...(sec.experience||[]),...(sec.projects||[])];
+ const unquantified=work.filter(l=>l.length>30&&!/\d/.test(l)).slice(0,8);
+ const skills=((fields&&fields.skills)||sec.skills||[]).map(s=>String(s).trim()).filter(s=>s.length>1&&s.length<40);
+ const other=[...sec.experience,...sec.projects,...sec.education,...sec.achievements,...sec.certifications].join(" ").toLowerCase();
+ const unevidencedSkills=skills.filter(s=>!other.includes(s.toLowerCase())).slice(0,10);
+ return{gaps:gaps.slice(0,4),metricClaims,responsibilityClaims,unquantified,unevidencedSkills,certifications:sec.certifications.slice(0,8),achievements:sec.achievements.slice(0,8),sections:Object.fromEntries(Object.entries(sec).map(([k,v])=>[k,v.length]))}}
+async function analyseCv(force){const cv=S.cv;if(!cv||!cv.text)throw new Error("Upload your CV first.");
+ if(!force&&cv.analysis&&cv.analysis.for===cv.updated)return cv.analysis;
+ const sig=cvSignals(cv.text,cv.fields);let ai_=null,err=null;
+ try{if(await aiOn()){ai_=await ai(`You are a senior recruiter reading a candidate's CV before an interview. Read ALL of it. Use only what is written; never invent anything. Identify what an interviewer would question.
+Local checks already found: ${JSON.stringify(sig).slice(0,3000)}
+CV:\n${cv.text.slice(0,20000)}
+Reply with only JSON: {"summary":"3 sentences","experience":[{"role":"","org":"","period":"","responsibilities":"","results":""}],"projects":[{"name":"","what":"","results":""}],"skills":[{"name":"","evidence":"strong|weak|none"}],"certifications":["..."],"achievements":["..."],"gaps":[{"what":"","why":""}],"unusualClaims":[{"claim":"quote","why":"why a recruiter would doubt or probe it"}],"probeAreas":[{"area":"short title","why":"what is vague, unmeasured or unusual","angle":"what to ask, as a direction not a script"}]}
+Give 8 to 12 probeAreas ordered by how likely an interviewer is to ask, covering responsibilities, measurable results, technical depth, gaps and unusual claims.`,{tier:"default",cache:false});
+   if(!ai_||!Array.isArray(ai_.probeAreas)||!ai_.probeAreas.length)ai_=null}}catch(e){err=aiMsg(e)}
+ const an={for:cv.updated,at:Date.now(),viaAi:!!ai_,aiError:err,signals:sig,summary:ai_?ai_.summary:"",experience:ai_?ai_.experience||[]:[],projects:ai_?ai_.projects||[]:[],skills:ai_?ai_.skills||[]:[],certifications:ai_?ai_.certifications||[]:sig.certifications,achievements:ai_?ai_.achievements||[]:sig.achievements,gaps:ai_?ai_.gaps||[]:sig.gaps.map(g=>({what:`${g.from} to ${g.to} (${g.months} months) with no listed activity`,why:"Unexplained gap"})),unusualClaims:ai_?ai_.unusualClaims||[]:[],probeAreas:ai_?ai_.probeAreas:localProbes(cv,sig)};
+ cv.analysis=an;save();return an}
+function localProbes(cv,sig){const f=cv.fields||{},p=[];
+ (f.experience||[]).slice(0,4).forEach(x=>p.push({area:"Experience: "+x.slice(0,60),why:"Responsibilities and measurable result need to be explained in the candidate's own words",angle:`On your CV you wrote “${x.slice(0,140)}”. What exactly was your own role there, what decisions did you make, and what was the result?`}));
+ (f.projects||[]).slice(0,3).forEach(x=>p.push({area:"Project: "+x.slice(0,60),why:"Depth and personal contribution",angle:`Tell me about this project from your CV: “${x.slice(0,140)}”. What did you personally do, and what would you change if you did it again?`}));
+ sig.unevidencedSkills.slice(0,2).forEach(s=>p.push({area:"Skill claim: "+s,why:"Listed but not evidenced anywhere else in the CV",angle:`Your CV lists “${s}”. Give me a concrete example of where you used it and what it produced.`}));
+ sig.gaps.slice(0,1).forEach(g=>p.push({area:`Gap ${g.from} to ${g.to}`,why:"Unexplained gap of "+g.months+" months",angle:`I notice your CV has a gap between ${g.from} and ${g.to}. What were you doing in that time, and what did you take from it?`}));
+ sig.unquantified.slice(0,2).forEach(x=>p.push({area:"Unmeasured result",why:"No numbers given",angle:`You describe “${x.slice(0,120)}”. How did you measure whether it worked?`}));
+ return p}
+
+/* ----- interview plan: what the interviewer intends to cover; adaptive at runtime ----- */
+const TYPE_LABEL={cv:"From your CV",company:"Company and role",technical:"Technical and domain",behavioural:"Behavioural",situational:"Situational",problem:"Problem-solving",hr:"HR and fit"};
+const ORIGIN_LABEL={followup:"Follow-up on your previous answer",cv:"Based on your CV",reported:"Adapted from a candidate-reported question",pattern:"Based on reported company process",domain:"Domain and role research (not company-reported)",general:"General practice question"};
+const DOMAIN_STYLE={"Consulting":"structured and case-led; probe logic, hypotheses, numbers and communication under ambiguity","Banking & Finance":"numerate and precise; probe accounting and market basics, risk thinking and attention to detail","FMCG":"consumer-centric; probe brand and category insight, distribution, P&L sense and execution","Technology":"project deep-dives and fundamentals; probe design choices, trade-offs and what they personally built","Manufacturing & Steel":"operations and plant-minded; probe process knowledge, safety, KPIs, shop-floor realities and willingness to relocate","E-commerce":"metrics and customer driven; probe marketplace thinking, experimentation and ownership","Healthcare & Pharma":"compliance-aware; probe regulated-environment judgement, stakeholder handling and scientific rigour","Automotive":"engineering and dealer-network minded; probe product, supply chain and customer insight","Media & Advertising":"creative-commercial; probe audience insight, campaign thinking and measurement","Retail & Apparel":"brand, retail and consumer-culture minded; probe merchandising, store or channel economics and brand passion"};
+function planSizes(total){return total<=4?{cv:2,company:1,technical:0,behavioural:1}:total<=7?{cv:3,company:2,technical:1,behavioural:1}:{cv:4,company:2,technical:2,behavioural:1,situational:1}}
+const DOMQ={"Consulting":["A client's profits have fallen 20% in a year. How would you structure your approach to find out why?","Estimate how many mobile phones are sold in India in a year. Talk me through your assumptions."],"Banking & Finance":["Walk me through how a change in interest rates affects a company's valuation and a bank's earnings.","Pick a recent market or economic event and tell me how it affects the sector you want to work in."],"FMCG":["Pick a product from {co}'s category you think is under-performing. How would you fix it, and how would you measure success?","How does a product reach a small retailer in a town, and where could things go wrong?"],"Technology":["Explain a technical choice you made on a project, the alternatives you rejected and why.","How would you debug a system that was working yesterday and is slow today?"],"Manufacturing & Steel":["Describe the main stages of a plant process you know and where safety or quality risks arise.","You are posted to a plant far from your home city, on rotating shifts. How do you feel about that, and why?"],"E-commerce":["Order cancellations at {co} jumped 15% last week. How would you investigate?","Which metric would you watch most closely in this role, and what would make you doubt it?"],"Healthcare & Pharma":["How would you handle a situation where hitting a target would mean bending a compliance rule?","Explain a scientific or product concept from this field to a non-specialist."],"Automotive":["What trends are changing the car market in India, and what do they mean for {co}?","A dealer is unhappy with delivery delays. What do you do?"],"Media & Advertising":["Take a campaign you admire. Who was the audience, what was the insight, and how would you measure it?","A client hates your idea the day before the pitch. What do you do?"],"Retail & Apparel":["Pick a {co} product or store experience you admire and tell me what you would change.","How would you decide which products to push in a store with limited shelf space?"]};
+const ROLEQ={"Marketing":["Pick one {co} campaign or product and tell me who it is for, what the positioning is, and how you would measure it.","How would you launch a new product at {co} with a small budget?"],"Sales":["How would you handle a customer who keeps refusing to buy from {co}?","Walk me through how you would build a pipeline in a new territory."],"Finance":["Walk me through the three financial statements and how a change in one flows into the others.","What would you check first in a set of accounts that looked too good?"],"Consulting":["Give me a structure for deciding whether {co}'s client should enter a new market.","Tell me about a time you worked through an ambiguous problem with incomplete data."],"Operations":["Where would you look first to cut waste in a process you know, and what would you measure?","How do you balance cost, quality and delivery speed when they conflict?"],"Technology":["Explain one project you built end to end and the hardest technical decision in it.","How would you test a feature before it goes live at {co}?"],"Product Management":["Which {co} product would you improve first, who is the user, and what would you measure?","How do you decide what not to build?"],"Human Resources":["How would you handle high attrition in one team at {co}?","Tell me about a time you handled a sensitive people issue."],"Data & Analytics":["Walk me through an analysis you did: the question, the data, the method, and what changed.","How would you tell a non-technical manager that the data does not support their idea?"]};
+const fillCo=(q,co)=>q.replace(/\{co\}/g,co);
+function planLocal(sel,an,pf,total){const co=sel.company||"the company",ro=sel.role,slots=[];
+ const intro={type:"cv",origin:"cv",focus:"Introduction",basis:"CV overview",ask:`Tell me about yourself and how your background leads to the ${ro} role${sel.company?" at "+co:""}.`};
+ const cvs=(an.probeAreas||[]).map(p=>({type:"cv",origin:"cv",focus:p.area,basis:p.why,ask:p.angle}));
+ const rep=pf?pf.items.reported.filter(x=>x.lit!==false).map(x=>({type:"company",origin:"reported",focus:"Candidate-reported question",basis:x.src,srcId:x.src,ask:x.q})):[];
+ const pat=[];
+ const T=templateQs({company:sel.company,role:ro,level:sel.level,jd:sel.jd,industry:sel.domain,type:""});
+ const co2=sel.company||"your target company";
+ const dq=(DOMQ[sel.domain]||[]).map(q=>({type:"technical",origin:"domain",focus:"Domain: "+sel.domain,basis:"Common for "+sel.domain+" interviews (domain knowledge, not company-reported)",ask:fillCo(q,co2)}));
+ const rq=(ROLEQ[sel.role]||[]).map(q=>({type:"company",origin:"domain",focus:"Role: "+sel.role,basis:"Typical "+sel.role+" interview ground (role knowledge, not company-reported)",ask:fillCo(q,co2)}));
+ const tech=[...dq,...T.filter(x=>x.type==="Technical"||x.type==="Role-specific").map(x=>({type:"technical",origin:"domain",focus:"Role and domain knowledge",basis:"Template",ask:x.q}))];
+ const beh=T.filter(x=>x.type==="Behavioural"||x.type==="HR").map(x=>({type:"behavioural",origin:"general",focus:"Behavioural",basis:"Template",ask:x.q}));
+ const sit=T.filter(x=>x.type==="Situational").map(x=>({type:"situational",origin:"general",focus:"Situational",basis:"Template",ask:x.q}));
+ const fit={type:"company",origin:"domain",focus:"Why this company and role",basis:"Fit",ask:`What do you know about ${co}'s business, and why this ${ro} role there?`};
+ const mine=((sel.setQs)||[]).slice(0,2).map(q=>({type:q.type==='Technical'?'technical':'company',origin:q.label==='reported'&&q.src?'reported':'general',focus:'Your selected question',basis:'Chosen by you in the Question Explorer',srcId:q.src||'',ask:q.q}));
+ const order=[intro,...mine,cvs[0],rep[0]||fit,cvs[1],tech[0],rq[0],cvs[2],beh[0],rep[1]||rq[1],sit[0],cvs[3],tech[1],cvs[4],beh[1]].filter(Boolean);
+ const seen=new Set();for(const s of order){if(seen.has(s.ask))continue;seen.add(s.ask);slots.push(s)}
+ if(!slots.some(s=>s.focus==="Why this company and role"))slots.splice(2,0,fit);
+ return slots.slice(0,total)}
+async function buildPlan(sel,an,pf,brief,total){
+ const need=planSizes(total);const myQs=(sel.setQs||[]).slice(0,2);
+ try{if(!(await aiOn()))throw{code:"unavailable"};
+  const r=await ai(`Design a SPOKEN mock interview that feels like a real hiring round for this specific company and candidate. Do not write generic questions.
+Company: ${sel.company||"(none)"}. Domain: ${sel.domain}. Role: ${sel.role}. Level: ${sel.level}. Round: ${sel.round}. Difficulty: ${sel.difficulty}. ${sel.jd?"Job description: "+sel.jd.slice(0,2500):""}
+Interviewer style for this domain: ${DOMAIN_STYLE[sel.domain]||"professional and probing"}.
+CANDIDATE CV ANALYSIS: ${JSON.stringify({summary:an.summary,experience:an.experience,projects:an.projects,skills:an.skills,gaps:an.gaps,unusualClaims:an.unusualClaims,probeAreas:an.probeAreas}).slice(0,5500)}
+COMPANY EVIDENCE (publicly sourced, anecdotal; ids are source ids): ${pf?JSON.stringify({match:pf.match,process:pf.items.process.map(x=>({src:x.src,text:x.text})),reported:pf.items.reported.map(x=>({src:x.src,q:x.q})),patterns:pf.items.patterns.map(x=>({src:x.src,text:x.text}))}).slice(0,4500):"none collected for this company"}
+${myQs.length?`QUESTIONS THE CANDIDATE CHOSE TO PRACTISE (include each as a slot, keep the substance, origin "general" unless it is clearly CV-based): ${JSON.stringify(myQs.map(q=>q.q))}
+`:""}GENERAL RESEARCH BRIEF (AI general knowledge, unverified): ${brief?JSON.stringify(brief).slice(0,2500):"none"}
+Plan exactly ${total} slots. Target mix: ${JSON.stringify(need)} (cv = questions built on the candidate's CV; company = company/role specific; technical = domain and role knowledge; behavioural; situational; problem = problem-solving/case). Also fold HR/fit into company or behavioural slots. The first slot is a tailored "tell me about yourself".
+RULES: origin "reported" ONLY when the slot adapts one of the COMPANY EVIDENCE reported questions (set srcId to its src id). origin "pattern" when it follows a COMPANY EVIDENCE process/pattern note (srcId too). origin "cv" for CV-based. origin "domain" for questions from the research brief or role/domain knowledge. NEVER label a question as reported/asked by the company unless it comes from COMPANY EVIDENCE. If the evidence is for a different role than the candidate's, adapt carefully or use it as "pattern" only. Each slot must differ from questions a different company or role would get: reference the company's business, products, role realities or the candidate's own CV items by name. Never ask something unrelated to the candidate's background without a clear reason (state it in "basis").
+Reply with only JSON: {"slots":[{"type":"cv|company|technical|behavioural|situational|problem","origin":"cv|reported|pattern|domain|general","focus":"short title","basis":"which CV item, evidence note or reason","srcId":"s1 or empty","ask":"the substance to ask, in plain words"}]}`,{tier:"default",cache:false});
+  const ok=(r&&r.slots||[]).filter(s=>s&&s.ask&&TYPE_LABEL[s.type]&&ORIGIN_LABEL[s.origin]&&s.origin!=="followup").map(s=>({type:s.type,origin:(s.origin==="reported"||s.origin==="pattern")&&!(pf&&pf.pack.sources.some(x=>x.id===s.srcId))?"domain":s.origin,focus:String(s.focus||"").slice(0,100),basis:String(s.basis||"").slice(0,200),srcId:s.srcId||"",ask:String(s.ask).slice(0,400)}));
+  if(ok.length<Math.min(3,total))throw{code:"invalid_json"};
+  return{slots:ok.slice(0,total),viaAi:true}}
+ catch(e){return{slots:planLocal(sel,an,pf,total),viaAi:false,aiError:aiMsg(e)}}}
+function planSummary(slots){const o={};slots.forEach(s=>{o[s.origin]=(o[s.origin]||0)+1});return o}
+</script>

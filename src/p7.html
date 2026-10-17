@@ -1,0 +1,122 @@
+<script>
+/* ---------- pricing ---------- */
+R(/^\/pricing$/,()=>({title:"Pricing",html:`${crumbs([["/","Home"],[null,"Pricing"]])}${head("Pricing","Proposed prices to test, not validated market rates. Plans and limits are configured in one place in the code.")}
+<div class="note" style="margin-bottom:16px"><b>Checkout is not available.</b> No payment gateway is configured, so no plan can be purchased and no payment is simulated. Everyone is on the Free plan.</div>
+<div class="grid g3">${PLANS_ASC.map(p=>`<div class="card stack"><h3>${p.name}</h3><div><span class="score" style="font-size:32px">${p.price}</span><span class="muted"> ${p.per}</span></div><ul class="stack" style="margin:0;padding-left:20px;flex:1">${p.feats.map(f=>`<li>${f}</li>`).join("")}</ul>${p.id==="free"?A(S.user?"/dashboard":"/signup",S.user?"Your current plan":"Start free","btn pri"):p.id==="college"?A("/contact","Contact for colleges","btn ghost"):`<button class="btn ghost" disabled>Checkout unavailable</button>`}</div>`).join("")}</div>
+<p class="small muted" style="margin-top:14px">Longer term, revenue is expected from student subscriptions and from university and placement-cell partnerships.</p>`}));
+
+/* ---------- jobs ---------- */
+R(/^\/jobs(?:\/([^/]+))?(?:\/([^/]+))?$/,(role,co)=>{const f={role:role||S.profile.roles[0]||"",co:co||"",loc:"",type:"",ind:""};
+ return{private:true,nav:"/jobs",title:"Job Opportunities",html:`${head("Job opportunities","Search by role, company, location and industry.")}
+<div class="note" style="margin-bottom:14px"><b>No job feed is connected.</b> ROLEVIA shows no listings of its own, so it cannot show descriptions, required skills or deadlines, and it will not make any up. The search below opens live results on public job sites. Listings there are not verified by ROLEVIA, and "last checked" is not available.</div>
+<form data-form="jobs" class="card stack" novalidate><div class="grid g2"><div class="field"><label for="jr">Role</label><input id="jr" name="role" value="${esc(f.role)}" placeholder="Marketing"></div><div class="field"><label for="jc">Company</label><input id="jc" name="co" value="${esc(f.co)}" placeholder="Any"></div><div class="field"><label for="jl">Location</label><input id="jl" name="loc" placeholder="Mumbai, Remote…"></div><div class="field"><label for="jt">Level</label><select id="jt" name="type"><option value="">Any</option><option>Internship</option><option>Entry-level</option><option>Experienced</option></select></div><div class="field"><label for="ji">Industry</label><select id="ji" name="ind"><option value="">Any</option>${INDUSTRIES.map(i=>`<option>${i}</option>`).join("")}</select></div></div><div><button class="btn pri" type="submit">Build search links</button></div></form><div id="jres" style="margin-top:16px"></div>`,mount:()=>{if(f.role||f.co)jobLinks(f)}}});
+FORM.jobs=(f,d)=>jobLinks({role:d.role,co:d.co,loc:d.loc,type:d.type,ind:d.ind});
+function jobLinks(d){const kw=[d.type,d.role,d.ind,d.co].filter(Boolean).join(" ").trim();const el=$("#jres");if(!kw){el.innerHTML=`<div class="err">Enter a role or company first.</div>`;return}
+ const q=encodeURIComponent(kw),l=encodeURIComponent(d.loc||"India");
+ const L=[["LinkedIn Jobs",`https://www.linkedin.com/jobs/search/?keywords=${q}&location=${l}`],["Indeed India",`https://in.indeed.com/jobs?q=${q}&l=${encodeURIComponent(d.loc||"")}`],["Google search",`https://www.google.com/search?q=${encodeURIComponent(kw+" jobs "+(d.loc||""))}`]];
+ if(d.co)L.unshift(["Official careers (search)",careersLink(d.co)]);
+ el.innerHTML=`<h3 style="margin-bottom:10px">Open results for “${esc(kw)}”${d.loc?" in "+esc(d.loc):""}</h3><div class="grid g3">${L.map(([n,u])=>`<a class="card row between" target="_blank" rel="noopener noreferrer" href="${u}"><b>${n}</b><span aria-hidden="true">↗</span></a>`).join("")}</div>`}
+
+/* ---------- CV (upload only: PDF or DOCX) ---------- */
+const CVF=[["education","Education"],["experience","Experience"],["skills","Skills"],["projects","Projects"]];
+const CV_MAX=5*1024*1024;
+const CV_LIBS={pdf:"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",pdfWorker:"https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js",docx:"https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"};
+const _scripts={};
+function loadScript(u){return _scripts[u]||(_scripts[u]=new Promise((ok,no)=>{const s=document.createElement("script");s.src=u;s.onload=ok;s.onerror=()=>{delete _scripts[u];no(new Error("Could not load the file reader ("+u.split("/")[5]+"). Check your connection and retry."))};document.head.appendChild(s)}))}
+function cvKind(file){const n=(file.name||"").toLowerCase();if(/\.pdf$/.test(n)||file.type==="application/pdf")return"pdf";if(/\.docx$/.test(n)||file.type==="application/vnd.openxmlformats-officedocument.wordprocessingml.document")return"docx";return null}
+function cvValidate(file){if(!file)return"Choose a PDF or DOCX file first.";const k=cvKind(file);if(!k){return/\.docx?$/i.test(file.name)&&!/\.docx$/i.test(file.name)?"Old .doc files are not supported. Save the CV as DOCX or PDF and upload that.":"Only PDF and DOCX files are accepted. This file is "+(file.name.split(".").pop()||"unknown").toUpperCase()+"."}
+ if(file.size===0)return"This file is empty.";if(file.size>CV_MAX)return"This file is "+(file.size/1048576).toFixed(1)+" MB. The limit is 5 MB.";return null}
+async function cvRead(file){const k=cvKind(file),buf=await file.arrayBuffer();
+ if(k==="pdf"){if(!window.pdfjsLib){await loadScript(CV_LIBS.pdf)}
+  if(!window.pdfjsLib)throw new Error("The PDF reader did not load.");
+  try{pdfjsLib.GlobalWorkerOptions.workerSrc=CV_LIBS.pdfWorker}catch(e){}
+  let doc;try{doc=await pdfjsLib.getDocument({data:new Uint8Array(buf)}).promise}catch(e){if(e&&e.name==="PasswordException")throw new Error("This PDF is password-protected. Remove the password and upload it again.");throw new Error("This PDF could not be opened. It may be damaged.")}
+  let out=[];for(let i=1;i<=Math.min(doc.numPages,12);i++){const pg=await doc.getPage(i),tc=await pg.getTextContent();let line="",y=null;
+   for(const it of tc.items){if(!("str" in it))continue;const yy=it.transform?Math.round(it.transform[5]):0;if(y!==null&&Math.abs(yy-y)>3){out.push(line);line=""}y=yy;line+=it.str+(it.hasEOL?"\n":"")}out.push(line)}
+  return out.join("\n").replace(/[ \t]+/g," ").replace(/\n{3,}/g,"\n\n").trim()}
+ if(!window.mammoth){await loadScript(CV_LIBS.docx)}
+ if(!window.mammoth)throw new Error("The DOCX reader did not load.");
+ try{return(await mammoth.extractRawText({arrayBuffer:buf})).value.replace(/[ \t]+/g," ").replace(/\n{3,}/g,"\n\n").trim()}catch(e){throw new Error("This DOCX could not be read. It may be damaged.")}}
+/* rules-based structuring, used when AI is unavailable */
+function cvRules(text){const H={education:/^(education|academics?|academic (background|qualifications?)|qualifications?)\b/i,experience:/^(work |professional |internship )?(experience|employment|work history|internships?)\b/i,skills:/^(technical |core |key )?(skills|competencies|tools|technologies)\b/i,projects:/^(academic |key |personal )?(projects|achievements|positions of responsibility|extracurriculars?)\b/i};
+ const out={education:[],experience:[],skills:[],projects:[]};let cur=null;
+ for(const raw of text.split("\n")){const l=raw.trim();if(!l)continue;const head=l.replace(/[:\-–—|]+$/,"").trim();let hit=null;
+  if(head.length<40)for(const k in H)if(H[k].test(head)){hit=k;break}
+  if(hit){cur=hit;continue}
+  if(cur){const parts=cur==="skills"&&l.includes(",")?l.split(/[,;•|]/).map(s=>s.trim()).filter(Boolean):[l.replace(/^[•\-*▪●◦]\s*/,"")];out[cur].push(...parts)}}
+ for(const k in out)out[k]=out[k].filter(x=>x.length>1).slice(0,40);return out}
+const cvCount=f=>CVF.reduce((n,[k])=>n+(f[k]||[]).length,0);
+async function cvStructure(text){let fields=null,method="rules";
+ try{if(await aiOn()){const r=await ai(`Extract details from this CV. Use only what is written; never invent anything. Reply with only JSON: {"education":["one line each"],"experience":["role, organisation, dates, one-line impact"],"skills":["..."],"projects":["..."]}\n\nCV:\n${text.slice(0,15000)}`,{tier:"quick"});
+  fields={};for(const [k] of CVF)fields[k]=(Array.isArray(r&&r[k])?r[k]:[]).map(String).filter(Boolean).slice(0,40);if(cvCount(fields)>0)method="ai";else fields=null}}catch(e){fields=null}
+ if(!fields)fields=cvRules(text);return{fields,method}}
+let CVST={state:"idle",msg:""};
+function cvPill(){const ok=cvVerify();return CVST.state==="busy"?`<span class="pill">Processing…</span>`:ok?`<span class="pill ok">Uploaded · processed</span>`:CVST.state==="err"?`<span class="pill bad">Upload failed · not uploaded</span>`:`<span class="pill bad">Not uploaded</span>`}
+function cvRefreshPill(){document.querySelectorAll("[data-cvpill]").forEach(e=>e.innerHTML=cvPill())}
+function cvProg(pct,label){const el=$("#cvstat");if(!el)return;el.innerHTML=`<div role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}" aria-label="CV upload progress" style="height:8px;border-radius:6px;background:var(--line,#e5e7eb);overflow:hidden"><div style="height:100%;width:${pct}%;background:var(--blue,#2563eb);transition:width .25s"></div></div><div class="small muted" style="margin-top:6px" role="status">${esc(label)} (${pct}%)</div>`}
+const cvStatus=(k,m)=>{CVST={state:k==="busy"?"busy":k==="ok"?"ok":"err",msg:m};cvRefreshPill();const el=$("#cvstat");if(!el)return;el.innerHTML=k==="busy"?loading(m):k==="ok"?`<div class="note ok" role="status">${esc(m)}</div>`:`<div class="note bad" role="alert">${esc(m)}</div>`};
+async function cvHandle(file){
+ const bad=cvValidate(file);if(bad){cvStatus("err",bad);return false}
+ $("#cvname").innerHTML=`<b>${esc(file.name)}</b> · ${(file.size/1024).toFixed(0)} KB`;
+ cvStatus("busy","Reading "+file.name+"…");cvProg(25,"Reading "+file.name);
+ let text;try{text=await cvRead(file)}catch(e){cvStatus("err",(e&&e.message||"The file could not be read.")+" You can retry or choose another file.");window.__cvLast=file;$("#cvretry")&&($("#cvretry").hidden=false);return false}
+ if(text.replace(/\s+/g,"").length<80){cvStatus("err","No readable text was found. This looks like a scanned or image-only file. Export your CV as a text-based PDF or DOCX and upload that.");return false}
+ cvStatus("busy","Extracting your details…");cvProg(65,"Extracting your details");
+ const {fields,method}=await cvStructure(text);
+ if(cvCount(fields)===0){cvStatus("err","Text was read, but no education, experience, skills or projects sections could be recognised. Use clear section headings (Education, Experience, Skills, Projects) and upload again.");return false}
+ const prev=S.cv;const rec={fileName:file.name,size:file.size,kind:cvKind(file),text:text.slice(0,20000),fields,method,use:true,updated:Date.now()};
+ if(!cvValid(rec)){cvStatus("err","The file was read but the result could not be verified, so it was not saved. "+(prev?"Your previous CV is unchanged.":"No CV is on file.")+" Retry or choose another file.");window.__cvLast=file;$("#cvretry")&&($("#cvretry").hidden=false);return false}
+ cvProg(90,"Saving");S.cv=rec;S.cvDiscarded=false;save();
+ if(!cvValid(S.cv)||!cvVerify()){S.cv=prev||null;try{save()}catch(e){}cvStatus("err","Could not save the CV in this browser (storage may be blocked). It was not uploaded. Retry or free some browser storage.");window.__cvLast=file;$("#cvretry")&&($("#cvretry").hidden=false);return false}
+
+ toast("CV uploaded");cvDraw(method==="ai"?"Details extracted with AI. Review them below.":"Details extracted by section headings (AI was unavailable). Review them below.");return true}
+function cvDraw(msg){const el=$("#cvmain");if(!el)return;if(!msg&&CVST.state==="busy")CVST={state:"idle",msg:""};el.innerHTML=cvBody();if(msg)cvStatus("ok",msg);cvRefreshPill()}
+function cvBody(){const c=S.cv;
+ return`<div class="grid g2"><div class="card stack"><div class="row between"><h3>${c?"Replace your CV":"Upload your CV"}</h3><span data-cvpill>${cvPill()}</span></div>${S.cvDiscarded&&!c?`<div class="note small">A previously saved CV entry was incomplete or came from an older version, so it was removed. Please upload your CV file.</div>`:""}
+ <p class="small muted">PDF or DOCX, up to 5 MB. Uploading is the only way to add a CV. The file is read in this browser. Only the extracted text and fields are saved here.</p>
+ <label class="drop" for="cf" id="drop"><input id="cf" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" data-act="cvfile" style="position:absolute;opacity:0;inset:0;cursor:pointer;width:100%;height:100%"><span><b>Choose a file</b> or drop it here</span></label>
+ <div id="cvname" class="small">${c?`Verified on file: <b>${esc(c.fileName)}</b> · ${(c.size/1024).toFixed(0)} KB · uploaded ${fmtDate(c.updated)} · ${cvCount(c.fields)} items extracted`:"No file chosen yet"}</div><div id="cvstat"></div>
+ <div class="row"><button class="btn ghost sm" id="cvretry" data-act="cvretry" hidden>Retry</button>${c?`<button class="btn ghost sm" data-act="cvdel">Remove CV</button>`:""}</div></div>
+ <div class="card stack"><h3>Extracted details</h3>${c?cvForm(c):`<div class="empty" style="padding:18px"><p class="muted">Nothing yet. Upload a CV and its details appear here for you to check.</p></div>`}</div></div>
+ ${c?`<div class="row" style="margin-top:16px"><a class="btn pri" href="#/interviews/new">Continue to interview setup</a><a class="btn ghost" href="#/dashboard">Back to dashboard</a></div>`:""}`}
+R(/^\/cv$/,()=>({private:true,nav:"/cv",title:"My CV",html:`${head("My CV","Upload a PDF or DOCX. Your interviews and feedback use it to ask about your real experience.")}<div id="cvmain">${cvBody()}</div>`,mount:()=>{const dz=$("#drop");const stop=e=>{e.preventDefault()};if(dz){["dragover","dragenter"].forEach(ev=>dz.addEventListener(ev,stop));dz.addEventListener("drop",e=>{e.preventDefault();const f=e.dataTransfer&&e.dataTransfer.files[0];if(f)cvHandle(f)})}}}));
+function cvForm(c){return`<p class="small muted" style="margin-bottom:8px">${c.method==="ai"?"Extracted with AI":"Extracted by section headings"} from <b>${esc(c.fileName)}</b>. Fix anything wrong.</p><form data-form="cvsave" class="stack" novalidate>${CVF.map(([k,l])=>`<div class="field"><label for="cv_${k}">${l} (one per line)</label><textarea id="cv_${k}" name="${k}" style="min-height:80px">${esc((c.fields[k]||[]).join("\n"))}</textarea></div>`).join("")}<label class="row" style="font-weight:500;margin:0"><input type="checkbox" name="use" style="width:auto;min-height:0" ${c.use?"checked":""}> Use my CV to personalise interviews and feedback</label><div class="row"><button class="btn pri" type="submit">Save changes</button></div></form>`}
+ACT.cvfile=()=>{};
+document.addEventListener("change",e=>{const t=e.target.closest("[data-act=cvfile]");if(t&&t.files&&t.files[0]){const f=t.files[0];window.__cvLast=f;cvHandle(f).then(ok=>{if(ok&&$("#su")&&typeof drawSetup==="function")drawSetup()}).finally(()=>{try{t.value=""}catch(x){}})}});
+ACT.cvretry=()=>{if(window.__cvLast)cvHandle(window.__cvLast).then(ok=>{if(ok&&$("#su")&&typeof drawSetup==="function")drawSetup()})};
+FORM.cvsave=(f,d)=>{if(!S.cv)return;S.cv.fields=Object.fromEntries(CVF.map(([k])=>[k,(d[k]||"").split("\n").map(x=>x.trim()).filter(Boolean)]));S.cv.use=!!d.use;S.cv.updated=Date.now();save();cvStatus("ok","Changes saved.")};
+ACT.cvdel=t=>{if(!t.dataset.sure){t.dataset.sure=1;t.textContent="Confirm remove";return}S.cv=null;S.cvDiscarded=false;CVST={state:"idle",msg:""};window.__cvLast=null;if(S.research)delete S.research.cvAnalysis;save();toast("CV removed");cvDraw();if($("#su")&&typeof drawSetup==="function")drawSetup()};
+
+/* ---------- progress ---------- */
+function lineChart(pts){if(pts.length<1)return"";const W=640,H=220,L=36,B=28,T=12,R_=12,x=i=>pts.length==1?(L+(W-L-R_)/2):L+i*(W-L-R_)/(pts.length-1),y=v=>T+(100-v)/100*(H-T-B);
+ const grid=[0,25,50,75,100].map(v=>`<line x1="${L}" x2="${W-R_}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L-6}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--muted)">${v}</text>`).join("");
+ const line=pts.map((p,i)=>`${i?"L":"M"}${x(i)},${y(p.v)}`).join(" ");
+ return`<div class="tablewrap"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Readiness score over time" style="min-width:420px;width:100%;height:auto">${grid}<path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2.5"/>${pts.map((p,i)=>`<circle cx="${x(i)}" cy="${y(p.v)}" r="4.5" fill="var(--accent)"/><text x="${x(i)}" y="${H-8}" text-anchor="middle" font-size="10" fill="var(--muted)">${esc(p.l)}</text>`).join("")}</svg></div>`}
+R(/^\/progress$/,()=>{const rs=[...S.reports].reverse(),gd=S.gdReports.filter(r=>!r.limited&&r.criteria);
+ const dimAvg=DIMS.map(([k,l])=>[l,avg(rs.map(r=>+r.dims[k]).filter(x=>x>=0))]);
+ const miss={};S.reports.forEach(r=>(r.revision||[]).forEach(t=>{const k=String(t).trim();miss[k]=(miss[k]||0)+1}));const topics=Object.entries(miss).sort((a,b)=>b[1]-a[1]).slice(0,6);
+ const gdPts=gd.slice().reverse().map(r=>({l:fmtDate(r.date).slice(0,6),v:avg(r.criteria.map(c=>c.score).filter(x=>x!=null))})).filter(p=>p.v!=null);
+ return{private:true,nav:"/progress",title:"Progress",html:`${head("Progress","Built only from your saved sessions.")}
+${!rs.length&&!S.gdReports.length?`<div class="empty"><h3>No data yet</h3><p class="muted">Complete a mock interview or a GD and your charts appear here. Nothing is pre-filled.</p><p style="margin-top:12px" class="row" style="justify-content:center">${A("/interviews/new","Start an interview","btn pri")} ${A("/gd","Find a GD","btn ghost")}</p></div>`:`
+<div class="grid g2"><div class="card stack" style="grid-column:1/-1"><h3>Readiness score over time</h3>${rs.length?lineChart(rs.map(r=>({v:r.overall,l:fmtDate(r.date).slice(0,6)}))):`<p class="muted">No interviews yet.</p>`}<p class="small muted">${rs.length} attempt${rs.length==1?"":"s"}. Practice scores only.</p></div>
+<div class="card stack"><h3>Skill-wise average</h3>${rs.length?dimAvg.map(([l,v])=>`<div><div class="row between small"><span>${l}</span><b>${v??"–"}</b></div><div class="bar"><i style="width:${v||0}%"></i></div></div>`).join(""):`<p class="muted">Appears after your first interview.</p>`}</div>
+<div class="card stack"><h3>GD performance</h3>${gdPts.length?lineChart(gdPts)+`<p class="small muted">Average of scored criteria per session.</p>`:`<p class="muted">${S.gdReports.length?"Your GD reports had too little evidence to score.":"No scored GDs yet."}</p>`}</div>
+<div class="card stack"><h3>Frequently missed topics</h3>${topics.length?jl(topics,([t,n])=>`<li>${esc(t)} <span class="pill">${n}×</span></li>`):`<p class="muted">Shows after your first report.</p>`}</div>
+<div class="card stack"><h3>Revision recommendations</h3>${S.reports[0]?jl(S.reports[0].improvements.slice(0,4)):`<p class="muted">Shows after your first report.</p>`}${S.reports[0]?`<p>${A("/reports/"+S.reports[0].id,"Open latest report","btn ghost sm")}</p>`:""}</div></div>`}`}});
+
+/* ---------- settings ---------- */
+R(/^\/settings$/,()=>({private:true,nav:"/settings",title:"Account Settings",html:`${head("Account settings")}
+<div class="grid g2"><div class="card stack"><h3>Profile</h3><div class="kv"><span class="muted">Name</span><span>${esc(S.user.name)}</span><span class="muted">Email</span><span>${esc(S.user.email)}</span><span class="muted">Level</span><span>${esc(S.profile.level||"Not set")}</span><span class="muted">Target roles</span><span>${esc(S.profile.roles.join(", ")||"None")}</span><span class="muted">Target companies</span><span>${esc(S.profile.targets.join(", ")||"None")}</span></div><div>${A("/onboarding","Edit preferences","btn ghost sm")}</div></div>
+<div class="card stack"><h3>Plan</h3><p><b>Free</b> · 3 AI mock interviews free for a year and 1 GD per month. ${A("/pricing","See plans")}</p><p class="small muted">Billing is not configured. No payment method is held.</p></div>
+<div class="card stack"><h3>Privacy and CV</h3><p class="small muted">Use of CV for personalisation is controlled in ${A("/cv","My CV")}. Reports and transcripts are private to this browser.</p><label class="row" style="font-weight:500;margin:0"><input type="checkbox" data-act="cvuse" style="width:auto;min-height:0" ${S.cv&&S.cv.use?"checked":""} ${S.cv?"":"disabled"}> Use CV details in interviews</label></div>
+<div class="card stack"><h3>Your data</h3><p class="small muted">Export everything stored in this browser, or delete it for good.</p><div class="row"><button class="btn ghost sm" data-act="export">Export data</button><button class="btn ghost sm" style="color:var(--bad)" data-act="wipe">Delete all my data</button></div><div id="setstat"></div></div></div>`}));
+document.addEventListener("change",e=>{const t=e.target.closest("[data-act=cvuse]");if(t&&S.cv){S.cv.use=t.checked;save()}});
+ACT.cvuse=()=>{};
+ACT.export=async()=>{const st=$("#setstat");let dl=null;try{dl=await window.claude.use("downloads")}catch(e){}
+ if(!dl){st.innerHTML=`<div class="note small">File download is unavailable in this view.</div>`;return}
+ try{await dl.save({filename:"rolevia-data.json",data:JSON.stringify(S,null,2)})}catch(e){st.innerHTML=`<div class="note small">Export was cancelled or blocked.</div>`}};
+ACT.wipe=t=>{if(!t.dataset.sure){t.dataset.sure=1;t.textContent="Confirm: delete everything";return}try{localStorage.removeItem(KEY)}catch(e){}mem=null;Object.keys(S).forEach(k=>delete S[k]);Object.assign(S,{user:null,profile:{level:"",roles:[],industries:[],goals:[],targets:[]},cv:null,bookmarks:[],lists:[],qlib:[],reports:[],sessions:[],companies:{},recent:[],gdReports:[],gdBookings:{}});toast("All local data deleted");go("/")};
+
+/* ---------- boot ---------- */
+render();initCaps().then(()=>{if(/^#\/(gd|dashboard)/.test(location.hash))render()});
+</script>

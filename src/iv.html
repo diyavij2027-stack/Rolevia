@@ -1,0 +1,325 @@
+<script>
+/* ---------- Voice-only AI interview ---------- */
+const monthN=()=>S.sessions.filter(s=>new Date(s.startedAt).getMonth()===new Date().getMonth()).length;
+const sById=id=>S.sessions.find(s=>s.id===id);
+const fmtClock=sec=>{sec=Math.max(0,Math.round(sec));return String(Math.floor(sec/60)).padStart(2,"0")+":"+String(sec%60).padStart(2,"0")};
+const wc=t=>(String(t||"").trim().match(/\S+/g)||[]).length;
+
+/* ----- speech out (text-to-speech) ----- */
+const TTS=typeof speechSynthesis!=="undefined"&&typeof SpeechSynthesisUtterance!=="undefined";
+let voiceCache=null,speakTok=0;
+function pickVoice(){if(!TTS)return null;const vs=speechSynthesis.getVoices();if(!vs.length)return null;if(voiceCache&&vs.includes(voiceCache))return voiceCache;
+ for(const re of [/en[-_]IN/i,/en[-_]GB/i,/en[-_]US/i,/^en/i]){const m=vs.filter(v=>re.test(v.lang));const nat=m.find(v=>/natural|neural|google|online/i.test(v.name))||m[0];if(nat){voiceCache=nat;return nat}}return vs[0]}
+function speak(text){const tok=++speakTok;return new Promise((res,rej)=>{if(!TTS){rej(new Error("tts-missing"));return}
+ try{speechSynthesis.cancel()}catch(e){}
+ const parts=String(text).replace(/\s+/g," ").match(/[^.!?]+[.!?]*/g)||[String(text)];let i=0,started=false;
+ const guard=setTimeout(()=>{if(tok===speakTok){try{speechSynthesis.cancel()}catch(e){}started?res():rej(new Error("tts-silent"))}},Math.max(8000,String(text).length*140));
+ const next=()=>{if(tok!==speakTok){clearTimeout(guard);res();return}if(i>=parts.length){clearTimeout(guard);res();return}
+  const u=new SpeechSynthesisUtterance(parts[i++].trim());const v=pickVoice();if(v){u.voice=v;u.lang=v.lang}u.rate=.97;u.pitch=1;
+  u.onstart=()=>{started=true};u.onend=()=>next();u.onerror=ev=>{if(ev&&(ev.error==="interrupted"||ev.error==="canceled")){clearTimeout(guard);res();return}clearTimeout(guard);rej(new Error("tts-error"))};
+  try{speechSynthesis.speak(u)}catch(e){clearTimeout(guard);rej(e)}};
+ next()})}
+function stopSpeak(){speakTok++;try{TTS&&speechSynthesis.cancel()}catch(e){}}
+if(TTS)try{speechSynthesis.onvoiceschanged=()=>{voiceCache=null}}catch(e){}
+
+/* ----- speech in (speech recognition with recovery) ----- */
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+const L={rec:null,active:false,base:"",cur:"",silence:null,hold:false,patience:3500,nos:0,net:0,cb:null};
+const SRERR={"not-allowed":"Microphone access is blocked. Allow the microphone for this page in your browser's site settings, then retry.","service-not-allowed":"The browser blocked speech recognition for this page. If ROLEVIA is embedded, open it in a full browser tab, then retry.","audio-capture":"No microphone was found. Connect or enable a microphone, then retry.","network":"Speech recognition lost its network connection. Check your internet, then retry.","language-not-supported":"Speech recognition does not support this language setting.","unsupported":"This browser does not support speech recognition. Use Chrome, Edge or Safari on a device with a microphone."};
+function lStart(cb){L.cb=cb;L.base="";L.cur="";L.hold=false;L.nos=0;L.net=0;if(!SR){cb.fatal("unsupported");return}L.active=true;lRun()}
+function lRun(){if(!L.active)return;let r;try{r=new SR()}catch(e){L.active=false;L.cb.fatal("unsupported");return}
+ L.rec=r;r.lang="en-IN";r.continuous=true;r.interimResults=true;
+ r.onstart=()=>L.cb.status("listening");
+ r.onsoundstart=()=>L.cb.sound&&L.cb.sound();
+ r.onresult=e=>{L.nos=0;L.net=0;L.hold=false;const t=Array.from(e.results).map(x=>x[0].transcript).join(" ").trim();L.cur=(L.base+" "+t).trim();L.cb.update(L.cur);clearTimeout(L.silence);
+  if(L.cur)L.silence=setTimeout(()=>{if(L.active&&!L.hold&&L.cur.trim().length>1)L.cb.auto(L.cur)},wc(L.cur)<8?L.patience+1500:L.patience)};
+ r.onerror=e=>{const c=e.error;
+  if(c==="no-speech"){L.nos++;L.cb.quiet&&L.cb.quiet(L.nos)}
+  else if(c==="not-allowed"||c==="service-not-allowed"||c==="audio-capture"||c==="language-not-supported"){L.active=false;L.cb.fatal(c)}
+  else if(c==="network"){L.net++;if(L.net>2){L.active=false;L.cb.fatal("network")}else L.cb.status("retry")}};
+ r.onend=()=>{if(L.active){L.base=L.cur;setTimeout(lRun,250)}};
+ try{r.start()}catch(e){setTimeout(()=>{if(L.active)lRun()},400)}}
+function lStop(){L.active=false;clearTimeout(L.silence);try{L.rec&&L.rec.abort()}catch(e){}L.rec=null}
+function lHold(ms){L.hold=true;clearTimeout(L.silence)}
+
+/* ----- list page ----- */
+R(/^\/interviews$/,()=>{const ls=liveSession();return{private:true,nav:"/interviews",title:"AI Mock Interviews",html:`${head("AI voice interviews","The interviewer speaks every question and listens to your spoken answers. There is no typing.")}
+<div class="grid g2"><div class="card stack"><h3>Start a new interview</h3><p class="muted">Choose a company, role and round, check your microphone, then talk it through.</p><div>${A("/interviews/new","Set up an interview","btn pri")}</div></div>
+<div class="card stack"><h3>This month</h3><p><span class="score" style="font-size:36px">${monthN()}</span> <span class="muted">interviews started. The Free plan includes 3 mock interviews for a year. Limits are configurable and not enforced until billing is set up.</span></p></div></div>
+${ls?`<div class="note info" style="margin-top:16px">You have an unfinished interview with ${esc(ls.company)}. ${A("/interviews/live/"+ls.id,"Resume it")}</div>`:""}
+<h3 style="margin:24px 0 10px">Previous attempts</h3>${S.reports.length?`<div class="stack">${S.reports.map(r=>`<a class="card row between" href="#/reports/${r.id}"><span><b>${esc(r.company)}</b> · ${esc(r.role)} · ${esc(r.round)}<br><span class="small muted">${fmtDate(r.date)}</span></span><span class="score" style="font-size:28px">${r.overall}</span></a>`).join("")}</div>`:`<div class="empty"><h3>No attempts yet</h3><p class="muted">Finish an interview and its report shows up here.</p></div>`}`}});
+
+/* ----- setup wizard: target, CV and details, prepare (analysis + research + plan) and audio check ----- */
+const SU={step:1,v:{},mic:false,spk:false,micMsg:"",micBusy:false,heard:"",prep:null};
+const suV=k=>SU.v[k]!==undefined?SU.v[k]:"";
+R(/^\/interviews\/new(?:\/([^/]+))?$/,slug=>{const co=slug&&S.companies[slug]?S.companies[slug].name:"";
+ const fresh=()=>({company:co,domain:"",role:S.profile.roles[0]||"Marketing",level:S.profile.level||LEVELS[0],round:ROUNDS[0],duration:"20",difficulty:"Standard",jd:""});
+ if(!SU.v.role||slug){SU.v=Object.assign(fresh(),slug?{company:co}:{});SU.prep=null}
+ if(!SU.v.domain&&SU.v.company){const p=POP.find(x=>normName(x[0])===normName(SU.v.company))||(findPack(SU.v.company)&&[0,findPack(SU.v.company).industry]);if(p)SU.v.domain=p[1]}
+ SU.step=1;
+ return{private:true,nav:"/interviews",title:"Interview setup",html:`${crumbs([["/interviews","AI Mock Interviews"],[null,"New interview"]])}${head("Set up your voice interview","Questions are built from your CV, the company, the domain and the role.")}<div id="su"></div>`,mount:()=>{drawSetup();return()=>{lStop();stopSpeak()}}}});
+const SUSTEPS=["Target","CV and details","Prepare and audio check"];
+const suKey=()=>JSON.stringify([SU.v.company,SU.v.domain,SU.v.role,SU.v.level,SU.v.round,SU.v.duration,SU.v.difficulty,(SU.v.jd||"").length,S.cv&&S.cv.updated]);
+function suSteps(){return`<div class="tabs" role="list" style="margin-bottom:14px">${SUSTEPS.map((t,i)=>`<span role="listitem" class="tab" ${SU.step===i+1?'aria-current="step"':""} style="${SU.step===i+1?"font-weight:800":"opacity:.6"}">${i+1}. ${t}</span>`).join("")}</div>`}
+function cvUploadBlock(){const c=S.cv;return`<div class="card stack" style="background:var(--lav-soft)"><div class="row between"><b>Your CV <span class="small" style="color:var(--bad)">(required)</span></b><span data-cvpill>${cvPill()}</span></div>
+ <p class="small muted">The interviewer reads your whole CV and asks about your real experience, results and gaps. PDF or DOCX, up to 5 MB. Upload is the only way to add a CV.</p>
+ <label class="drop" for="cf" id="drop"><input id="cf" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" data-act="cvfile" style="position:absolute;opacity:0;inset:0;cursor:pointer;width:100%;height:100%"><span><b>${c?"Replace file":"Choose a file"}</b> or drop it here</span></label>
+ <div id="cvname" class="small">${c?`Current: <b>${esc(c.fileName)}</b> · ${(c.size/1024).toFixed(0)} KB`:"No file chosen yet"}</div><div id="cvstat"></div><div class="row"><button class="btn ghost sm" id="cvretry" data-act="cvretry" hidden>Retry</button></div></div>`}
+function drawSetup(){const el=$("#su");if(!el)return;const set=PENDING_SET;let body="";
+ if(SU.step===1){const pf=suV("company")?findPack(suV("company")):null;
+  body=`${set?`<div class="note info" style="margin-bottom:12px">Using your “${esc(set.name)}” set (${set.items.length} questions) as extra material.</div>`:""}<div class="grid g2"><div class="field"><label for="ic">Target company</label><input id="ic" name="company" value="${esc(suV("company"))}" list="cl2" placeholder="e.g. Puma" autocomplete="off"><datalist id="cl2">${POP.map(p=>`<option value="${esc(p[0])}">`).join("")}${S.profile.targets.map(t=>`<option value="${esc(t)}">`).join("")}</datalist></div>
+  <div class="field"><label for="idm">Domain / industry</label><select id="idm" name="domain"><option value="">Select…</option>${INDUSTRIES.map(r=>`<option ${r===suV("domain")?"selected":""}>${r}</option>`).join("")}</select></div>
+  <div class="field"><label for="ir">Job role</label><select id="ir" name="role">${ROLES.map(r=>`<option ${r===suV("role")?"selected":""}>${r}</option>`).join("")}</select></div>
+  <div class="field"><label for="il">Experience level</label><select id="il" name="level">${LEVELS.map(l=>`<option ${l===suV("level")?"selected":""}>${l}</option>`).join("")}</select></div>
+  <div class="field"><label for="io">Interview round</label><select id="io" name="round">${ROUNDS.map(r=>`<option ${r===suV("round")?"selected":""}>${r}</option>`).join("")}</select></div></div>
+  ${pf?`<div class="note info small"><b>Public research found for ${esc(pf.pack.name)}.</b> ${pf.pack.sources.length} source${pf.pack.sources.length==1?"":"s"}; evidence is anecdotal and limited. The match for your role: <b>${pf.match}</b>.</div>`:suV("company")?`<div class="note small">No collected public interview reports for ${esc(suV("company"))}. The interview will use your CV plus an AI briefing on the role and domain, clearly marked as not company-reported.</div>`:""}`}
+ else if(SU.step===2)body=`<div class="grid g2"><div class="field"><label for="id">Duration</label><select id="id" name="duration">${[["10","10 minutes · about 4 questions"],["20","20 minutes · about 7 questions"],["30","30 minutes · about 10 questions"]].map(([v,t])=>`<option value="${v}" ${v===suV("duration")?"selected":""}>${t}</option>`).join("")}</select></div>
+ <div class="field"><label for="if">Difficulty</label><select id="if" name="difficulty">${["Easy","Standard","Hard"].map(x=>`<option ${x===suV("difficulty")?"selected":""}>${x}</option>`).join("")}</select></div></div>
+ <div class="field"><label for="ij">Job description (optional)</label><textarea id="ij" name="jd" placeholder="Paste the posting so the interviewer can tailor questions" style="min-height:90px">${esc(suV("jd"))}</textarea></div>${cvUploadBlock()}`;
+ else body=prepPanel();
+ const canStart=SU.prep&&SU.prep.status==="done"&&SU.mic&&SU.spk;
+ el.innerHTML=`<div class="card stack lg">${suSteps()}${body}<div class="err" id="ierr" role="alert"></div><div class="row">${SU.step>1?`<button class="btn ghost" data-act="suback">Back</button>`:""}${SU.step<3?`<button class="btn pri" data-act="sunext">Continue</button>`:`<button class="btn pri" data-act="sustart" ${canStart?"":"disabled"}>Start interview</button>`}</div></div>`;
+ const dz=$("#drop");if(dz){["dragover","dragenter"].forEach(ev=>dz.addEventListener(ev,e=>e.preventDefault()));dz.addEventListener("drop",e=>{e.preventDefault();const f=e.dataTransfer&&e.dataTransfer.files[0];if(f)cvHandle(f).then(ok=>{if(ok)drawSetup()})})}}
+function prepPanel(){const P=SU.prep;
+ const stepRow=(label,st,det)=>`<div class="row" style="align-items:flex-start;flex-wrap:nowrap"><span style="width:22px;text-align:center">${st==="done"?"✓":st==="run"?'<span class="spin"></span>':st==="err"?"!":"·"}</span><div><b>${label}</b>${det?`<div class="small muted">${det}</div>`:""}</div></div>`;
+ let h=`<div class="stack"><h3>Preparing your interview</h3>`;
+ if(!P||P.status==="idle")h+=`<p class="muted">ROLEVIA will analyse your CV, look up what is publicly known about ${esc(suV("company")||"your target")} for this role, and design an interview plan.</p><div><button class="btn pri" data-act="suprep">Analyse CV and prepare</button></div>`;
+ else{h+=`<div class="card stack">${stepRow("Reading and analysing your CV",P.s1,P.d1)}${stepRow("Researching "+esc(suV("company")||"the company")+" and the "+esc(suV("role"))+" role",P.s2,P.d2)}${stepRow("Designing your interview plan",P.s3,P.d3)}</div>`;
+  if(P.status==="err")h+=`<div class="note bad" role="alert">${esc(P.err)}</div><div class="row"><button class="btn pri" data-act="suprep">Retry</button></div>`;
+  if(P.status==="done")h+=prepSummary(P)}
+ h+=`</div>`;
+ if(P&&P.status==="done")h+=`<div class="stack"><h3>Audio check</h3>${audioCheck()}</div>`;
+ return h}
+function prepSummary(P){const an=P.an,pf=P.pf,o=planSummary(P.plan);
+ return`<div class="grid g2"><div class="card stack"><h4>What an interviewer is likely to question in your CV</h4>${(an.probeAreas||[]).slice(0,6).map(p=>`<div class="small"><b>${esc(p.area)}</b><div class="muted">${esc(p.why)}</div></div>`).join("")||'<p class="muted small">No areas found.</p>'}${an.gaps&&an.gaps.length?`<div class="small"><b>Gaps noticed:</b> ${an.gaps.map(g=>esc(g.what)).join("; ")}</div>`:""}<p class="tiny muted">${an.viaAi?"Analysed by AI plus automatic checks.":"AI was unavailable, so this uses automatic CV checks only."}</p></div>
+ <div class="card stack"><h4>Research behind this interview</h4>${pf?`<p class="small"><b>${esc(pf.pack.name)}</b>: ${pf.items.reported.length} reported question${pf.items.reported.length==1?"":"s"} and ${pf.items.process.length+pf.items.patterns.length} process notes apply to a ${esc(suV("role"))} role. Role match: <b>${pf.match}</b>; evidence: <b>${pf.evidence}</b>.</p>${pf.otherRoles.length?`<p class="small muted">The sources are mostly about other roles (${pf.otherRoles.join(", ")}), so they are used only where they transfer.</p>`:""}<div class="small">${pf.pack.sources.map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">${esc(s.title)}</a>`).join("<br>")}</div>`:`<p class="small">No collected public interview reports for ${esc(suV("company")||"this company")}, so no question will be presented as reported by that company.</p>`}${P.brief?`<p class="small muted">Plus an AI briefing on the role and domain (general knowledge, unverified).</p>`:P.d2err?`<p class="small muted">${esc(P.d2err)}</p>`:""}</div></div>
+ <div class="card"><b>Interview plan:</b> <span class="small">${P.plan.length} planned areas ·</span> ${Object.entries(o).map(([k,n])=>`<span class="pill">${n} ${esc(ORIGIN_LABEL[k]||k)}</span>`).join(" ")}<p class="small muted" style="margin-top:6px">${P.planAi?"Planned by AI.":"AI was unavailable, so a rule-based plan from your CV and the research is used. Follow-ups will not adapt."} Questions are not shown in advance; they are spoken and adapt to your answers.</p></div>`}
+ACT.suprep=async()=>{suCollect();const er=$("#ierr");if(!S.cv){er.textContent="Upload your CV first (step 2).";return}
+ const key=suKey();const P=SU.prep={status:"run",key,s1:"run",s2:"idle",s3:"idle"};drawSetup();
+ try{P.an=await analyseCv();P.s1="done";P.d1=(P.an.viaAi?"AI read your full CV":"Automatic checks (AI unavailable)")+` · ${(P.an.probeAreas||[]).length} areas to probe`;
+  P.s2="run";drawSetup();const sel={...SU.v,setQs:PENDING_SET?PENDING_SET.items.map(q=>({q:q.q||q.text||String(q),type:q.type,label:q.label,src:q.src})):[]};P.pf=packFor(sel.company,sel.role);
+  try{P.brief=await researchBrief(sel,P.pf)}catch(e){P.brief=null;P.d2err="The AI briefing could not be generated ("+aiMsg(e)+"). Only the collected public notes and your CV are used."}
+  P.s2="done";P.d2=(P.pf?`${P.pf.pack.name}: ${P.pf.items.reported.length+P.pf.items.process.length+P.pf.items.patterns.length} collected notes (${P.pf.match} role match)`:"No collected reports for this company")+(P.brief?" + AI briefing":"");
+  P.s3="run";drawSetup();const total=+sel.duration<=10?4:+sel.duration<=20?7:10;
+  const pl=await buildPlan(sel,P.an,P.pf,P.brief,total);P.plan=pl.slots;P.planAi=pl.viaAi;P.s3="done";P.d3=`${P.plan.length} areas`+(pl.viaAi?"":" (rule-based)");
+  P.status="done"}
+ catch(e){P.status="err";P.err=(e&&e.message)||"Preparation failed. Try again.";if(P.s1==="run")P.s1="err";else if(P.s2==="run")P.s2="err";else P.s3="err"}
+ if(SU.step===3)drawSetup()};
+function audioCheck(){
+ const unsup=!SR||!TTS?`<div class="note bad" role="alert"><b>This browser cannot run a voice interview.</b> ${!SR?SRERR.unsupported:"Speech output is not available."} The interview is voice-only, so use a supported browser.</div>`:"";
+ return`<div class="stack"><p class="muted">The interview is voice-only. Check that you can hear the interviewer and that the interviewer can hear you.</p>${unsup}
+ <div class="card stack"><div class="row between"><div><b>1. Speaker</b><div class="small muted">Plays a short spoken greeting.</div></div><span class="pill ${SU.spk?"ok":""}">${SU.spk?"Confirmed":"Not checked"}</span></div>
+ <div class="row"><button class="btn ghost sm" data-act="testspk" ${TTS?"":"disabled"}>Play test voice</button>${SU.spkPlayed?`<button class="btn blue sm" data-act="spkyes">I heard it</button><button class="btn ghost sm" data-act="spkno">I didn't hear it</button>`:""}</div><div class="small" id="spkmsg">${SU.spkMsg||""}</div></div>
+ <div class="card stack"><div class="row between"><div><b>2. Microphone</b><div class="small muted">Click, allow the microphone if asked, and say “I am ready”.</div></div><span class="pill ${SU.mic?"ok":""}">${SU.mic?"Working":SU.micBusy?"Listening…":"Not checked"}</span></div>
+ <div class="row"><button class="btn ghost sm" data-act="testmic" ${SR&&!SU.micBusy?"":"disabled"}>${SU.micBusy?"Listening…":"Test microphone"}</button>${SU.micBusy?`<span class="rec"><i></i> Recording</span>`:""}</div>
+ <div class="small" id="micmsg" role="status">${SU.micMsg||""}</div></div></div>`}
+ACT.testspk=async()=>{SU.spkMsg="Playing…";SU.spkPlayed=false;drawSetup();try{await speak("Hello. This is your interviewer. If you can hear me clearly, press the button that says I heard it.");SU.spkPlayed=true;SU.spkMsg=""}catch(e){SU.spkMsg="No sound could be played. Check your volume and that this tab is not muted, then try again."}drawSetup()};
+ACT.spkyes=()=>{SU.spk=true;SU.spkMsg="";drawSetup()};
+ACT.spkno=()=>{SU.spk=false;SU.spkMsg="Raise your system volume, unmute this tab, or connect your speakers or headphones, then play the test again.";drawSetup()};
+ACT.testmic=()=>{if(SU.micBusy)return;SU.micBusy=true;SU.mic=false;SU.micMsg="Waiting for microphone permission…";drawSetup();let done=false;
+ const end=(ok,msg)=>{if(done)return;done=true;lStop();SU.micBusy=false;SU.mic=ok;SU.micMsg=msg;drawSetup()};
+ const to=setTimeout(()=>end(false,"Nothing was heard in 12 seconds. Check that the right microphone is selected and not muted, then test again."),12000);
+ lStart({status:()=>{SU.micMsg="Listening. Say “I am ready”.";const m=$("#micmsg");if(m)m.textContent=SU.micMsg},sound:()=>{const m=$("#micmsg");if(m)m.textContent="Sound detected…"},update:t=>{if(wc(t)>=1){clearTimeout(to);end(true,"Heard you: “"+t.slice(0,80)+"”. Your microphone works.")}},auto:()=>{},quiet:()=>{},fatal:c=>{clearTimeout(to);end(false,SRERR[c]||SRERR.unsupported)}})};
+function suCollect(){const g=id=>{const e=$("#"+id);return e?e.value:undefined};
+ const m={company:g("ic"),domain:g("idm"),role:g("ir"),level:g("il"),round:g("io"),duration:g("id"),difficulty:g("if"),jd:g("ij")};for(const k in m)if(m[k]!==undefined)SU.v[k]=m[k]}
+document.addEventListener("input",e=>{if(e.target.id==="ic"&&$("#su")){const p=POP.find(x=>normName(x[0])===normName(e.target.value));const pk=findPack(e.target.value);const d=p?p[1]:pk?pk.industry:"";if(d&&$("#idm")&&!$("#idm").value)$("#idm").value=d}});
+ACT.suback=()=>{suCollect();lStop();SU.micBusy=false;SU.step=Math.max(1,SU.step-1);drawSetup()};
+ACT.sunext=()=>{suCollect();const er=$("#ierr");
+ if(SU.step===1){if(!(SU.v.company||"").trim()){er.textContent="Enter a target company to continue.";$("#ic")&&$("#ic").focus();return}if(!SU.v.domain){er.textContent="Choose the domain or industry.";$("#idm")&&$("#idm").focus();return}}
+ if(SU.step===2&&!S.cv){er.textContent="Upload your CV to continue. The interview is built from it.";return}
+ if(SU.step===2&&SU.prep&&SU.prep.key!==suKey())SU.prep=null;
+ SU.step=Math.min(3,SU.step+1);drawSetup();if(SU.step===3&&!SU.prep)ACT.suprep()};
+ACT.sustart=()=>{suCollect();lStop();stopSpeak();const v=SU.v,P=SU.prep,co=(v.company||"").trim(),dur=+v.duration||20,total=dur<=10?4:dur<=20?7:10;
+ if(!P||P.status!=="done"){$("#ierr").textContent="Finish preparing the interview first.";return}
+ if(!SU.mic||!SU.spk){$("#ierr").textContent="Complete both audio checks first.";return}
+ if(P.key!==suKey()){$("#ierr").textContent="Your details changed after preparation. Prepare again.";SU.prep=null;drawSetup();return}
+ const s={id:uid(),company:co,domain:v.domain,slug:slugify(co),role:v.role,level:v.level,round:v.round,duration:dur,difficulty:v.difficulty,jd:(v.jd||"").slice(0,4000),useCv:true,custom:null,total,turns:[],status:"active",elapsed:0,startedAt:Date.now(),voice:true,
+  plan:P.plan,planAi:P.planAi,cvA:{summary:P.an.summary||"",experience:(P.an.experience||[]).slice(0,6),projects:(P.an.projects||[]).slice(0,5),skills:(P.an.skills||[]).slice(0,14),gaps:(P.an.gaps||[]).slice(0,4),unusualClaims:(P.an.unusualClaims||[]).slice(0,4),probeAreas:(P.an.probeAreas||[]).slice(0,12),viaAi:P.an.viaAi,signals:{gaps:P.an.signals.gaps,unevidencedSkills:P.an.signals.unevidencedSkills,unquantified:P.an.signals.unquantified.slice(0,4)}},
+  research:{packId:P.pf?P.pf.pack.id:null,match:P.pf?P.pf.match:"none",evidence:P.pf?P.pf.evidence:"none",sources:P.pf?P.pf.pack.sources:[],brief:P.brief||null,reported:P.pf?P.pf.items.reported:[],patterns:P.pf?P.pf.items.patterns:[],process:P.pf?P.pf.items.process:[]}};
+ PENDING_SET=null;SU.v={};SU.prep=null;S.sessions.unshift(s);save();go("/interviews/live/"+s.id)};
+
+/* ----- live interview ----- */
+R(/^\/interviews\/live\/([^/]+)$/,id=>{const s=sById(id);
+ if(!s)return{private:true,nav:"/interviews",html:`<div class="empty"><h3>Interview not found</h3><p class="muted">It may have been deleted.</p><p style="margin-top:10px">${A("/interviews","Back","btn pri")}</p></div>`};
+ if(s.status==="done")return{private:true,nav:"/interviews",html:`<div class="empty"><h3>This interview is finished</h3><p style="margin-top:10px">${s.reportId?A("/reports/"+s.reportId,"Open report","btn pri"):A("/interviews","Back","btn pri")}</p></div>`};
+ return{private:true,nav:"/interviews",title:"Interview · "+s.company,html:`<div class="card stack" id="vroom" style="min-height:min(560px,72vh);justify-content:space-between"></div>`,mount:()=>liveMount(s)}});
+function liveMount(s){
+ const G={s,phase:"ready",timer:null,gone:false,paused:false,lastQ:"",followRun:0,quietMsg:0,turnStart:0,answerTimer:null,cutTimer:null,heard:"",err:null,micUp:false};
+ window.__G=G;
+ const root=$("#vroom");
+ const answered=()=>s.turns.filter(t=>t.a!=null).length;
+ const mainsDone=()=>s.turns.filter(t=>t.kind==="main"&&t.a!=null).length;
+ const stateText={ready:["Ready","Press start when you are ready."],speak:["Interviewer is speaking","Listen to the question."],listen:["Your turn","Speak your answer. Pause when you are done."],think:["Interviewer is thinking","One moment."],closing:["Closing","Last question."],paused:["Paused","The timer is stopped."],error:["Problem","See below."],end:["Wrapping up","Preparing your feedback."]};
+ const draw=()=>{if(G.gone)return;const [t,h]=stateText[G.phase]||["",""];const ph=G.phase;const orb=ph==="listen"?"listen":ph==="speak"||ph==="closing"?"speak":"";
+  const remain=s.duration*60-s.elapsed;
+  root.innerHTML=`<div class="row between" style="align-items:flex-start"><div><b>${esc(s.company)}</b> · ${esc(s.role)}<div class="small muted">${esc(s.round)} · ${esc(s.difficulty)}</div></div><div style="text-align:right"><div class="score" style="font-size:30px;${remain<60?"color:var(--bad)":""}" id="vclock" aria-label="Time remaining">${fmtClock(remain)}</div><div class="small muted">remaining</div></div></div>
+  <div><div class="row between small"><span id="vprog">${progText()}</span></div><div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(answered()/s.total*100)}"><i id="vbar" style="width:${Math.round(answered()/s.total*100)}%"></i></div></div>
+  <div class="stack" style="align-items:center;text-align:center;gap:14px;padding:10px 0"><div class="mic ${orb}" aria-hidden="true">${ph==="listen"?"🎙":ph==="speak"||ph==="closing"?"🔊":ph==="think"||ph==="end"?"…":ph==="paused"?"⏸":"🎙"}</div>
+   <div><div style="font-size:22px;font-weight:800" role="status" aria-live="polite">${t}</div><div class="muted" id="vhint">${G.hint||h}</div></div>
+   <div style="min-height:24px">${ph==="listen"?`<span class="rec"><i></i> Recording</span> <span class="small muted" id="vwc">· ${wc(G.heard)} words captured</span>`:ph==="think"||ph==="end"?`<span class="spin"></span>`:""}</div></div>
+  ${G.err?`<div class="note bad" role="alert">${G.err}</div>`:""}
+  <div class="row" style="justify-content:center">${controls()}</div>`};
+ const progText=()=>{const n=Math.min(mainsDone()+(G.phase==="closing"?0:1),s.total);return G.phase==="closing"||G.phase==="end"?"Wrapping up":(G.phase==="ready"&&!s.turns.length?`${s.total} questions`:`Question ${n} of ${s.total}`)};
+ const controls=()=>{const ph=G.phase;
+  if(ph==="ready")return`<button class="btn pri" data-act="vstart">${s.turns.length?"Resume interview":"Start interview"}</button><button class="btn ghost" data-act="vend">End</button>`;
+  if(G.err&&G.errAct)return`<button class="btn pri" data-act="${G.errAct}">${G.errLabel||"Retry"}</button><button class="btn ghost" data-act="vend">End interview</button>`;
+  if(ph==="listen")return`<button class="btn pri" data-act="vdone">I'm done answering</button><button class="btn ghost" data-act="vrepeat">Repeat question</button><button class="btn ghost" data-act="vpause">Pause</button><button class="btn ghost" data-act="vend">End</button>`;
+  if(ph==="speak")return`<button class="btn blue" data-act="vcut">Interrupt and answer</button><button class="btn ghost" data-act="vpause">Pause</button><button class="btn ghost" data-act="vend">End</button>`;
+  if(ph==="paused")return`<button class="btn pri" data-act="vpause">Resume</button><button class="btn ghost" data-act="vend">End</button>`;
+  if(ph==="closing")return`<button class="btn pri" data-act="vdone">I'm done</button><button class="btn ghost" data-act="vend">End</button>`;
+  return`<button class="btn ghost" data-act="vend">End interview</button>`};
+ const setPhase=(p,hint)=>{G.phase=p;G.hint=hint||"";if(p!=="error")G.err=null;draw()};
+ const fail=(msg,act,label)=>{lStop();stopSpeak();clearTimeout(G.answerTimer);clearTimeout(G.cutTimer);G.err=msg;G.errAct=act;G.errLabel=label;G.phase="error";G.hint="";draw()};
+ G.draw=draw;G.fail=fail;G.setPhase=setPhase;G.answered=answered;G.mainsDone=mainsDone;
+
+ G.timer=setInterval(()=>{if(G.phase==="ready"||G.phase==="paused"||G.phase==="end"||G.gone)return;s.elapsed+=1;if(s.elapsed%5===0)save();
+  const c=$("#vclock");if(c){const r=s.duration*60-s.elapsed;c.textContent=fmtClock(r);c.style.color=r<60?"var(--bad)":""}
+  if(G.phase==="listen"){const w=$("#vwc");if(w)w.textContent="· "+wc(G.heard)+" words captured"}
+  if(s.duration*60-s.elapsed<=0&&!G.timeUp){G.timeUp=true}},1000);
+
+ /* speak a line, then run cb (never shows the text) */
+ const say=async(text,phase)=>{if(G.gone||G.paused)return false;setPhase(phase||"speak");try{await speak(text);return !G.gone}catch(e){fail("The interviewer's voice could not be played. Check your volume and that this tab is not muted, then retry.","vretryspeak","Retry voice");G.pendingSay=[text,phase];return false}};
+ G.say=say;
+ ACT.vretryspeak=async()=>{const p=G.pendingSay;if(p){G.err=null;if(await say(p[0],p[1]))p[1]==="closing"?listenClosing():listenNow()}};
+
+ /* listen for an answer */
+ function listenNow(){if(G.gone||G.paused)return;G.heard="";G.quietMsg=0;G.turnStart=Date.now();setPhase("listen");
+  lStart({status:st=>{if(st==="retry"){G.hint="Connection hiccup. Retrying…";const h=$("#vhint");if(h)h.textContent=G.hint}},
+   sound:()=>{},
+   update:t=>{G.heard=t;G.hint="";const h=$("#vhint");if(h&&h.textContent!=="Speak your answer. Pause when you are done.")h.textContent="Speak your answer. Pause when you are done."},
+   auto:t=>submitAnswer(t),
+   quiet:n=>{G.quietMsg=n;if(n===1){const h=$("#vhint");if(h)h.textContent="I am not hearing anything yet. Take your time."}
+     if(n===3&&!G.nudged){G.nudged=true;lStop();say("Take your time. If you would like me to repeat the question, just say, repeat. Otherwise, go ahead whenever you are ready.","speak").then(ok=>{if(ok)listenNow()})}
+     else if(n>=7){lStop();submitAnswer("(no answer given)",true)}},
+   fatal:c=>fail(SRERR[c]||SRERR.unsupported,"vretrymic","Retry microphone")});
+  clearTimeout(G.cutTimer);G.cutTimer=setTimeout(()=>{if(G.phase==="listen"&&wc(G.heard)>260)cutIn()},130000)}
+ G.listenNow=listenNow;
+ ACT.vretrymic=()=>{G.err=null;if(G.closing)listenClosing();else listenNow()};
+ async function cutIn(){const a=G.heard;lStop();clearTimeout(G.cutTimer);G.cut=true;await submitAnswer(a,false,true)}
+
+ /* voice commands: only short utterances */
+ function command(t){const x=t.toLowerCase().replace(/[^a-z ]/g," ").replace(/\s+/g," ").trim();if(wc(x)>7)return null;
+  if(/^(can you |could you |please )?(repeat|say that again|say it again|come again|pardon)\b/.test(x)||/^repeat( the)? question/.test(x))return"repeat";
+  if(/^(give me|hold on|wait|one|just a)\b.*\b(moment|second|minute|sec|think)\b/.test(x)||/^let me think\b/.test(x)||/^(hold on|wait)$/.test(x))return"hold";
+  if(/^(skip|next|pass)( this)?( question)?$/.test(x)||/^i (don t|do not) know$/.test(x))return"skip";
+  if(/^(end|stop) (the )?interview$/.test(x))return"end";return null}
+ async function submitAnswer(text,silent,interrupted){
+  if(G.gone||G.busyTurn)return;const t=s.turns[s.turns.length-1];text=(text||"").trim();
+  if(!silent){const c=command(text);
+   if(c==="repeat"){lStop();G.heard="";await say(G.lastQ,"speak");if(!G.gone&&!G.paused)G.closing?listenClosing():listenNow();return}
+   if(c==="hold"){lHold();lStop();L.patience=9000;listenNow();G.hint="Take your time. I will wait.";const h=$("#vhint");if(h)h.textContent=G.hint;return}
+   if(c==="skip"){text="(skipped)"}
+   if(c==="end"){lStop();finish();return}}
+  L.patience=3500;G.busyTurn=true;lStop();clearTimeout(G.cutTimer);clearTimeout(G.answerTimer);
+  if(G.closing){G.busyTurn=false;return closingReply(text)}
+  if(t&&t.a==null){t.a=text||"(no answer given)";t.ms=Date.now()-G.turnStart;if(interrupted)t.cutIn=true;save()}
+  G.followRun=t&&t.kind==="followup"?G.followRun+1:0;
+  draw();G.busyTurn=false;
+  if(interrupted){await say("Let me jump in there, I want to be mindful of time. Thank you.","speak")}
+  nextTurn()}
+ G.submit=submitAnswer;
+
+ /* decide and ask the next turn */
+ const outOfTime=()=>s.duration*60-s.elapsed<=20;
+ const planOf=i=>(s.plan||[])[i];
+ async function nextTurn(){if(G.gone)return;
+  if(mainsDone()>=s.total||outOfTime()||(G.timeUp&&mainsDone()>0)){return closing()}
+  setPhase("think");let r=null;const used=new Set(s.turns.filter(t=>t.slot>=0).map(t=>t.slot));
+  if(!s.turns.length){const p0=planOf(0)||{type:"cv",origin:"cv",focus:"Introduction",basis:"CV overview"};
+   r={say:`Hello${S.user&&S.user.name?" "+S.user.name.split(" ")[0]:""}, and thank you for joining. I am your interviewer for the ${s.role} role${s.company?" at "+s.company:""}. I have gone through your CV, so I will ask about your actual experience. Let's begin. Please tell me about yourself, and what draws you to this role${s.company?" at "+s.company:""}.`,kind:"main",slot:0}}
+  else if(!s.ailess){try{r=await ai(turnPrompt(),{tier:"default",cache:false});if(G.gone)return;if(!r||!r.say)throw{code:"invalid_json"}}
+   catch(e){if(G.gone)return;if(e&&(e.code==="unavailable"||e.code==="not_granted"||e.code==="sampling_disabled")){s.ailess=true;save();G.notice="Adaptive follow-ups are unavailable, so I will use the planned questions."}
+    else{return fail(aiMsg(e)+" Your progress is saved.","vretryturn","Try again")}}}
+  if(!r){const rem=(s.plan||[]).map((p,i)=>i).filter(i=>!used.has(i));const i=rem.length?rem[0]:-1;const p=planOf(i);
+   if(!p){return closing()}
+   r={say:(mainsDone()?"Thank you. ":"")+p.ask,kind:"main",slot:i}}
+  let slot=Number.isInteger(r.slot)&&planOf(r.slot)?r.slot:-1;const kind=r.kind==="followup"&&G.followRun<2?"followup":"main";
+  if(kind==="main"&&slot>=0&&used.has(slot)&&s.turns.length>0)slot=-1;
+  const prev=s.turns[s.turns.length-1];let meta;
+  if(kind==="followup"){meta={type:prev?prev.type:"cv",origin:prev?prev.origin:"cv",basis:"Follow-up on your previous answer",slot:-1,srcId:prev?prev.srcId:""}}
+  else if(slot>=0){const p=planOf(slot);meta={type:p.type,origin:p.origin,basis:p.basis||p.focus||"",slot,srcId:p.srcId||""}}
+  else meta={type:"company",origin:"domain",basis:"Adapted to your earlier answers",slot:-1,srcId:""};
+  const line=String(r.say).replace(/\s+/g," ").trim().slice(0,600);
+  G.lastQ=line;s.turns.push({q:line,kind,a:null,at:Date.now(),topic:r.topic||"",...meta});save();
+  const ok=await say(line,"speak");if(ok&&!G.paused)listenNow()}
+ G.next=nextTurn;
+ ACT.vretryturn=()=>{G.err=null;nextTurn()};
+ function turnPrompt(){const R_=s.research||{},cvA=s.cvA||{};
+  const used=new Set(s.turns.filter(t=>t.slot>=0).map(t=>t.slot));
+  const remaining=(s.plan||[]).map((p,i)=>({slot:i,type:p.type,origin:p.origin,focus:p.focus,basis:p.basis,ask:p.ask})).filter(p=>!used.has(p.slot));
+  const hist=s.turns.map(t=>`Interviewer (${t.kind}, ${t.type||""}): ${t.q}\nCandidate: ${t.a??"(not answered)"}`).join("\n\n");
+  const brief=R_.brief?JSON.stringify({roleReality:R_.brief.roleReality,competencies:R_.brief.competencies,domainTopics:R_.brief.domainTopics,companyAngles:R_.brief.companyAngles,styles:R_.brief.stylesOfQuestioning}).slice(0,1800):"none";
+  const ev=R_.packId?JSON.stringify({process:(R_.process||[]).map(x=>x.text),patterns:(R_.patterns||[]).map(x=>x.text)}).slice(0,1800):"none collected";
+  return`You are a real hiring-panel interviewer at ${s.company || "the company"} running a SPOKEN ${s.round} interview for a ${s.role} role (${s.domain}). Candidate level: ${s.level}. Difficulty: ${s.difficulty}. Interviewer style for this domain: ${DOMAIN_STYLE[s.domain]||"professional and probing"}. ${s.jd?"Job description: "+s.jd.slice(0,2000):""}
+CANDIDATE CV ANALYSIS (this is the candidate's real background; ask about it, never invent anything about them): ${JSON.stringify(cvA).slice(0,4200)}
+PUBLICLY REPORTED PROCESS AND PATTERNS FOR THIS COMPANY (anecdotal): ${ev}
+ROLE AND DOMAIN BRIEFING (AI general knowledge, unverified): ${brief}
+PLAN SLOTS NOT YET ASKED (choose what fits best next, adapt the wording to what the candidate has said; each has a type and origin): ${JSON.stringify(remaining).slice(0,3800)}
+Everything you write is read aloud, so use natural spoken English: short sentences, no lists, no markdown, no emojis, under 60 words. The candidate's answers are speech-to-text transcripts and may contain recognition errors, so never comment on spelling or grammar.
+Main questions asked so far: ${mainsDone()} of ${s.total}. Follow-ups in a row: ${G.followRun}. Minutes left: ${Math.max(0,Math.round((s.duration*60-s.elapsed)/60))}.
+Transcript so far:\n${hist}\n
+How to decide the next turn, like a skilled interviewer:
+1. Briefly acknowledge what they said in a few natural words that reveal nothing about a model answer. Do NOT give feedback, scores or hints.
+2. If the last answer was vague, unsupported, unmeasured, rehearsed, or contradicts the CV, challenge it naturally with ONE sharp follow-up that quotes their own words or a CV item (for example: "You said you led it. What exactly did you decide yourself?" or "What number moved because of that?"). Do not follow up more than twice in a row.
+3. Otherwise ask a main question from the unasked plan slots. Pick the one that best fits the conversation, and word it for this candidate and this company, naming CV items and company specifics. Keep a balanced mix over the interview (CV, company and role, domain knowledge, behavioural or situational, problem-solving). If a slot has origin "reported", you may ask it in your own words, but never say or imply to the candidate that the company asked it. Never ask anything unrelated to their background or the role without a clear reason.
+4. If strong answers so far, raise the difficulty a little; if struggling, make it more approachable.
+5. One question only. Do not repeat anything already asked.
+Reply with only JSON: {"say":"what you will say aloud","kind":"main|followup","slot":number of the plan slot you used (or -1 for a follow-up or a new question),"topic":"2-4 word topic"}`}
+
+ /* closing phase */
+ async function closing(){G.closing=true;G.busyTurn=false;setPhase("closing");
+  const ok=await say("That brings me to the end of my questions. Before we finish, do you have any questions for me?","closing");if(ok&&!G.paused)listenClosing()}
+ function listenClosing(){G.heard="";G.turnStart=Date.now();setPhase("closing");L.patience=3500;
+  lStart({status:()=>{},update:t=>{G.heard=t},auto:t=>closingReply(t),quiet:n=>{if(n>=3){lStop();closingReply("(no questions)")}},fatal:c=>fail(SRERR[c]||SRERR.unsupported,"vretrymic","Retry microphone")})}
+ async function closingReply(text){if(G.gone||G.busyTurn)return;G.busyTurn=true;lStop();text=(text||"").trim();s.candQ=text;save();
+  const none=!text||text==="(no questions)"||/^(no|nope|nothing|no questions|not really|i m good|i am good|that s all)\b/i.test(text.replace(/[^a-zA-Z ]/g," ").trim());
+  setPhase("think");let reply="";
+  if(!none&&!s.ailess){try{const r=await ai(`You are the interviewer for a ${s.role} role at ${s.company}, closing a spoken mock interview. The candidate asked: "${text.slice(0,500)}". Answer in at most 40 words of natural spoken English. You are a practice interviewer: do not invent specific facts about the company, pay, or hiring process; if you do not know, say what a candidate should ask the real recruiter. Reply with only JSON: {"say":""}`,{tier:"quick",cache:false});reply=(r&&r.say||"").slice(0,400)}catch(e){reply=""}}
+  if(G.gone)return;
+  const bye=`${reply?reply+" ":""}Thank you for your time today. That is the end of the interview. I will prepare your feedback now.`;
+  await say(bye,"speak");G.busyTurn=false;if(!G.gone)finish()}
+ async function finish(){if(G.gone)return;G.finishing=true;lStop();stopSpeak();clearInterval(G.timer);setPhase("end");await doFinish(s,root)}
+ G.finish=finish;
+ ACT.vretryfin=()=>doFinish(s,root);
+
+ /* controls */
+ ACT.vstart=async()=>{if(!SR||!TTS){return fail(SRERR.unsupported)}
+  G.err=null;G.paused=false;
+  if(s.turns.length){const last=s.turns[s.turns.length-1];if(last.a==null){G.lastQ=last.q;G.followRun=0;const ok=await say("Welcome back. Let me repeat the question. "+last.q,"speak");if(ok)listenNow()}else nextTurn()}
+  else nextTurn()};
+ ACT.vdone=()=>{const a=G.heard;if(wc(a)<2){const h=$("#vhint");if(h)h.textContent="I have not heard your answer yet. Please speak, then press done.";return}submitAnswer(a)};
+ ACT.vrepeat=async()=>{lStop();clearTimeout(G.cutTimer);G.heard="";const ok=await say(G.lastQ,"speak");if(ok&&!G.paused)G.closing?listenClosing():listenNow()};
+ ACT.vcut=()=>{stopSpeak()};
+ ACT.vpause=()=>{if(G.phase==="paused"){G.paused=false;s.status="active";save();const t=s.turns[s.turns.length-1];if(G.closing){closing()}else if(t&&t.a==null){say("Let's continue. "+t.q,"speak").then(ok=>{if(ok)listenNow()})}else nextTurn();return}
+  G.paused=true;lStop();stopSpeak();clearTimeout(G.cutTimer);s.status="paused";save();setPhase("paused")};
+ ACT.vend=t=>{if(!t.dataset.sure){t.dataset.sure="1";t.textContent="Confirm: end and get report";t.classList.remove("ghost");t.classList.add("pri");return}lStop();stopSpeak();G.closing=true;finish()};
+
+ draw();
+ return()=>{G.gone=true;lStop();stopSpeak();clearInterval(G.timer);clearTimeout(G.cutTimer);save();if(window.__G===G)window.__G=null}
+}
+
+/* ----- scoring after the interview ----- */
+async function doFinish(s,room){const n=s.turns.filter(t=>t.a&&t.a!=="(skipped)"&&t.a!=="(no answer given)").length;
+ if(n===0){s.status="done";save();room.innerHTML=`<div class="empty"><h3>Interview ended</h3><p class="muted">No answers were captured, so there is nothing to score.</p><p style="margin-top:10px">${A("/interviews","Back to interviews","btn pri")}</p></div>`;return}
+ s.status="active";room.innerHTML=`<div class="stack" style="align-items:center;text-align:center;padding:40px 0">${loading("Scoring your answers against your CV and the role…")}</div>`;
+ try{const hist=s.turns.map((t,i)=>`Q${i+1} [${t.kind}; type ${t.type||"?"}; basis: ${t.basis||""}]: ${t.q}\nA${i+1}: ${t.a??"(not answered)"}`).join("\n\n");
+  const R_=s.research||{},cvA=s.cvA||{};
+  const r=await ai(`You are an interview coach scoring a SPOKEN mock interview. Company: ${s.company}; domain: ${s.domain}; role: ${s.role}; round: ${s.round}; level: ${s.level}; difficulty: ${s.difficulty}. The answers are speech-to-text transcripts: ignore recognition errors, punctuation and filler words, and judge content, structure and relevance.
+CANDIDATE CV ANALYSIS (ground truth about the candidate): ${JSON.stringify(cvA).slice(0,4500)}
+RESEARCH USED (anecdotal, public): ${R_.packId?JSON.stringify({process:(R_.process||[]).map(x=>x.text),patterns:(R_.patterns||[]).map(x=>x.text)}).slice(0,1500):"no collected company reports"}; role/domain briefing: ${R_.brief?JSON.stringify({competencies:R_.brief.competencies,domainTopics:R_.brief.domainTopics}).slice(0,1200):"none"}
+Base every judgement ONLY on the answers and the CV analysis. Be specific and fair. NEVER invent achievements, numbers, employers or experiences for the candidate. In "improved" sample answers, use only facts the candidate stated in the interview or that appear in the CV analysis; where a fact or number is missing, write a placeholder such as [add your real result here] instead of making one up. Do not predict hiring outcomes. Skipped or unanswered questions lower relevant scores. Judge CV credibility by whether spoken answers confirm, extend or contradict the CV, and whether claims were backed with specifics. Scores are integers 0-100.
+
+${hist}
+
+Reply with only JSON: {"overall":0,"dims":{"communication":0,"cvCredibility":0,"roleFit":0,"domainKnowledge":0,"problemSolving":0,"structure":0},"summary":"2 sentences","cv":{"consistent":["claims the answers supported, with what was said"],"unsupported":["claims that stayed vague or unverified"],"contradictions":["anything that conflicted with the CV, or empty"],"note":"1-2 sentences on CV credibility"},"roleFit":"3 sentences on fit for this ${s.role} role at ${s.company}","domainKnowledge":"3 sentences with the specific topics that were strong or weak","communication":"2-3 sentences","strengths":["..."],"improvements":["..."],"perQuestion":[{"score":0,"worked":"what worked, referring to what they said","missing":"what was missing","improved":"a stronger answer built only from their real experience, with placeholders where facts are missing"}],"revision":["topics to revise, specific to ${s.company} and ${s.role}"],"plan":[{"when":"Today","step":""},{"when":"This week","step":""},{"when":"Before the interview","step":""}]}
+perQuestion must have exactly ${s.turns.length} items in the same order as the questions above.`,{tier:"default",cache:false});
+  const pq=(r.perQuestion||[]);
+  const rep={id:uid(),sessionId:s.id,company:s.company,domain:s.domain,role:s.role,round:s.round,level:s.level,difficulty:s.difficulty,date:Date.now(),minutes:Math.max(1,Math.round(s.elapsed/60)),
+   turns:s.turns,overall:Math.max(0,Math.min(100,Math.round(+r.overall||0))),dims:r.dims||{},summary:r.summary||"",strengths:r.strengths||[],improvements:r.improvements||[],
+   perQuestion:s.turns.map((t,i)=>({question:t.q,score:(pq[i]||{}).score,worked:(pq[i]||{}).worked||(pq[i]||{}).feedback||"",missing:(pq[i]||{}).missing||"",improved:(pq[i]||{}).improved||"",type:t.type,origin:t.kind==="followup"?"followup":t.origin,basis:t.basis,srcId:t.kind==="followup"?"":t.srcId})),
+   cv:r.cv||{},roleFitNote:r.roleFit||"",domainNote:r.domainKnowledge||"",commNote:r.communication||"",revision:r.revision||[],plan:r.plan||[],voice:true,usedCv:true,
+   research:{company:s.company,evidence:R_.evidence||"none",match:R_.match||"none",sources:R_.sources||[],hasBrief:!!R_.brief,planAi:!!s.planAi,cvAi:!!(cvA&&cvA.viaAi),origins:planSummary(s.plan||[])}};
+  S.reports.unshift(rep);s.status="done";s.reportId=rep.id;save();go("/reports/"+rep.id)}
+ catch(e){room.innerHTML=`<div class="stack" style="padding:20px 0"><div class="note bad" role="alert"><b>Your interview is saved, but it could not be scored.</b> ${esc(aiMsg(e))}</div><div class="row"><button class="btn pri" data-act="vretryfin">Try scoring again</button>${A("/interviews","Back to interviews","btn ghost")}</div><p class="small muted">${n} answer${n==1?"":"s"} captured over ${fmtClock(s.elapsed)}. Scoring needs Claude access, which is not available right now.</p></div>`}}
+ACT.vretryfin=()=>{const G=window.__G;if(G)doFinish(G.s,$("#vroom"))};
+</script>

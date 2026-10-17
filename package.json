@@ -1,0 +1,8 @@
+{
+  "name": "rolevia",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ROLEVIA: company-specific, CV-based voice interview practice.",
+  "scripts": { "build:site": "node scripts/build.js", "dev": "npx vercel dev" },
+  "engines": { "node": ">=18" }
+}

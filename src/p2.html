@@ -1,0 +1,109 @@
+<div id="app"></div>
+<div id="toast" role="status" aria-live="polite" style="position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));z-index:50;pointer-events:none"></div>
+<script>
+"use strict";
+/* ---------- helpers ---------- */
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36).slice(-4);
+const slugify=s=>String(s).toLowerCase().trim().replace(/&/g,"and").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,48)||"company";
+const fmtDate=t=>new Date(t).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"});
+const fmtTime=t=>new Date(t).toLocaleString("en-IN",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+function toast(m){const t=$("#toast");t.innerHTML='<div style="background:var(--black);color:var(--on-black);padding:10px 18px;border-radius:999px;font-weight:700;font-size:14px">'+esc(m)+'</div>';clearTimeout(toast.t);toast.t=setTimeout(()=>t.innerHTML="",2600)}
+const A=(h,t,c="")=>`<a class="${c}" href="#${h}">${t}</a>`;
+
+/* ---------- persistence (per-viewer, this browser only) ---------- */
+const KEY="rolevia.v1";
+let mem=null;
+function load(){try{const r=localStorage.getItem(KEY);if(r)return JSON.parse(r)}catch(e){}return mem}
+const S=Object.assign({user:null,profile:{level:"",roles:[],industries:[],goals:[],targets:[]},cv:null,bookmarks:[],lists:[],qlib:[],reports:[],sessions:[],companies:{},recent:[],gdReports:[],gdBookings:{}},load()||{});
+S.profile=Object.assign({level:"",roles:[],industries:[],goals:[],targets:[]},S.profile||{});["roles","industries","goals","targets"].forEach(k=>{if(!Array.isArray(S.profile[k]))S.profile[k]=[]});["bookmarks","lists","qlib","reports","sessions","recent","gdReports"].forEach(k=>{if(!Array.isArray(S[k]))S[k]=[]});if(!S.companies||typeof S.companies!=="object")S.companies={};if(!S.research||typeof S.research!=="object")S.research={};if(!S.gdBookings||typeof S.gdBookings!=="object")S.gdBookings={};
+function save(){mem=S;try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+
+/* a CV counts as uploaded only if a real file was read and processed: name, readable text, extracted fields, timestamp */
+function cvValid(c){return !!c&&typeof c==="object"&&typeof c.fileName==="string"&&c.fileName.trim().length>0&&typeof c.text==="string"&&c.text.replace(/\s+/g,"").length>=80&&!!c.fields&&typeof c.fields==="object"&&Object.values(c.fields).some(a=>Array.isArray(a)&&a.length>0)&&typeof c.updated==="number"&&c.updated>0}
+function cvVerify(){if(S.cv&&!cvValid(S.cv)){S.cv=null;S.cvDiscarded=true;try{save()}catch(e){}}return !!S.cv}
+cvVerify();
+
+/* ---------- config: plans are data, not code ---------- */
+const PLANS=[
+ {id:"free",name:"Free",amount:0,price:"₹0",per:"/month",limits:{interviews:3,gd:1},feats:["3 AI mock interviews free for a year","Basic company research","1 live GD per month","Basic feedback"]},
+ {id:"premium",name:"Premium",amount:799,price:"₹799",per:"/month",limits:{interviews:30,gd:4},feats:["30 AI mock interviews per month","Detailed company-specific preparation","CV-based questions and feedback","4 live GD sessions per month","Progress tracking and preparation plans"]},
+ {id:"pro",name:"Placement Pro",amount:599,price:"₹599",per:"/month",limits:{interviews:60,gd:8},feats:["Higher interview usage limits","Advanced role-specific preparation","8 live GD sessions per month","Detailed analytics and personalised preparation","Priority GD booking"]},
+ {id:"gd",name:"Individual GD",amount:179,price:"₹179",per:"/session",limits:{},feats:["1 scheduled live GD session with real candidates","Individual AI feedback"]},
+ {id:"gd3",name:"3 GD Session Pack",amount:537,price:"₹537",per:"/pack of 3",limits:{},sessions:3,feats:["3 scheduled live GD sessions (₹179 each, no discount applied)","Individual AI feedback after every session","Book any 3 slots, one per slot"]},
+ {id:"college",name:"College Plan",amount:1799,price:"From ₹1,799",per:"/student/year",limits:{},feats:["Student interview and GD preparation","Placement-cell dashboard","Aggregate, privacy-conscious insights"]}
+];
+const PLANS_ASC=PLANS.slice().sort((a,b)=>a.amount-b.amount);
+const ROLES=["Marketing","Finance","Consulting","Sales","Product Management","Operations","Technology","Human Resources","Data & Analytics"];
+const INDUSTRIES=["Consulting","Banking & Finance","FMCG","Technology","Manufacturing & Steel","E-commerce","Healthcare & Pharma","Automotive","Media & Advertising","Retail & Apparel"];
+const ROUNDS=["HR / Behavioural","Case / Problem solving","Technical / Role knowledge","Managerial","Final / Leadership"];
+const QTYPES=["HR","Behavioural","Technical","Situational","Role-specific","Case / estimation","Motivation & fit","Current affairs"];
+const LEVELS=["Student / Fresher","0–2 years","3–6 years","7+ years"];
+const GD_CATS=["Current affairs","Business","Marketing","Economics","Technology","Social issues","Abstract"];
+/* popular companies: names and industries only (used for suggestions, not as profile data) */
+const POP=[["Google","Technology"],["Amazon","E-commerce"],["Microsoft","Technology"],["Apple","Technology"],["Meta","Technology"],["Flipkart","E-commerce"],["Deloitte","Consulting"],["McKinsey & Company","Consulting"],["Boston Consulting Group","Consulting"],["Bain & Company","Consulting"],["KPMG","Consulting"],["PwC","Consulting"],["EY","Consulting"],["Accenture","Consulting"],["Tata Consultancy Services","Technology"],["Infosys","Technology"],["Wipro","Technology"],["HCLTech","Technology"],["HDFC Bank","Banking & Finance"],["ICICI Bank","Banking & Finance"],["State Bank of India","Banking & Finance"],["Goldman Sachs","Banking & Finance"],["JPMorgan Chase","Banking & Finance"],["Hindustan Unilever","FMCG"],["Procter & Gamble","FMCG"],["Nestlé","FMCG"],["ITC","FMCG"],["Puma","Retail & Apparel"],["Nike","Retail & Apparel"],["Adidas","Retail & Apparel"],["Tata Steel","Manufacturing & Steel"],["JSW Steel","Manufacturing & Steel"],["SAIL","Manufacturing & Steel"],["Tata Motors","Automotive"],["Mahindra & Mahindra","Automotive"],["Maruti Suzuki","Automotive"],["Reliance Industries","Manufacturing & Steel"],["Swiggy","E-commerce"],["Zomato","E-commerce"],["Pepperfry","E-commerce"],["Licious","E-commerce"],["Cipla","Healthcare & Pharma"],["Sun Pharma","Healthcare & Pharma"],["Ogilvy","Media & Advertising"],["L'Oréal","FMCG"],["Galderma","Healthcare & Pharma"],["Samagra","Consulting"]];
+function lev(a,b){const m=[];for(let i=0;i<=a.length;i++){m[i]=[i]}for(let j=0;j<=b.length;j++)m[0][j]=j;for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)m[i][j]=Math.min(m[i-1][j]+1,m[i][j-1]+1,m[i-1][j-1]+(a[i-1]==b[j-1]?0:1));return m[a.length][b.length]}
+function suggest(q){q=q.toLowerCase().trim();if(!q)return[];
+ return POP.map(([n,i])=>{const l=n.toLowerCase();let s=99;
+  if(l.startsWith(q))s=0;else if(l.includes(q))s=1;else{const toks=l.split(/[^a-z0-9]+/);const d=Math.min(...toks.map(t=>lev(t.slice(0,q.length+1),q)));if(d<=Math.max(1,Math.floor(q.length/4)))s=2+d}
+  return{n,i,s}}).filter(x=>x.s<99).sort((a,b)=>a.s-b.s).slice(0,6)}
+
+/* ---------- AI boundary (viewer's own Claude via the sample capability) ---------- */
+let _sample;const getSample=async()=>{if(_sample!==undefined)return _sample;try{_sample=await window.claude.use("sample")}catch(e){_sample=null}return _sample};
+const AIERR={not_granted:"Claude access was declined for this page. Allow it to use AI features.",sampling_disabled:"Claude is not available for this account or organisation.",rate_limited:"Too many requests, or your usage limit was reached. Try again shortly.",session_expired:"Your session expired. Sign in again.",unavailable:window.ROLEVIA_SITE?"The AI service is not reachable right now. Check your connection, or try again later. The site owner may not have configured it yet.":"AI is not available in this view. Open the page inside Claude to enable it.",invalid_json:"The AI reply could not be read. Try again.",upstream_error:"The AI service had a problem. Try again.",cancelled:"Cancelled."};
+const aiMsg=e=>AIERR[e&&e.code]||"Something went wrong. Try again.";
+async function ai(prompt,o={}){const sm=await getSample();if(!sm)throw{code:"unavailable"};return sm.json(prompt,{modelTier:o.tier||"default",cache:o.cache===false?false:undefined,signal:o.signal})}
+const aiOn=async()=>!!(await getSample());
+
+/* ---------- identity: viewer-level (claude.ai) data for GD ---------- */
+const VIEW={me:null,db:null,room:null,canEdit:false};
+async function initCaps(){try{const u=await window.claude.use("user");if(u){VIEW.me=await u.me();VIEW.canEdit=await u.canEdit()}}catch(e){}
+ try{VIEW.db=await window.claude.use("db")}catch(e){} try{VIEW.room=await window.claude.use("room")}catch(e){}}
+
+/* ---------- layout ---------- */
+function footer(){return `<footer class="footer"><div><div class="logo"><i></i>ROLEVIA</div><p class="small muted" style="margin-top:8px;max-width:30ch">Know the company. Prepare for the role. Own the room.</p></div>
+<div><h4>Product</h4>${A("/companies","Companies")}${A("/pricing","Pricing")}${A("/gd","GD Arena")}</div>
+<div><h4>Company</h4>${A("/about","About")}${A("/contact","Contact")}${A("/help","Help")}</div>
+<div><h4>Legal</h4>${A("/privacy","Privacy Policy")}${A("/terms","Terms")}</div></footer>`}
+function pubHead(){return `<header class="top"><a class="logo" href="#/"><i></i>ROLEVIA</a><nav class="nav" aria-label="Main">
+${A("/features","Features")}${A("/how-it-works","How It Works")}${A("/pricing","Pricing")}
+${S.user?A("/dashboard","Dashboard","btn pri sm"):A("/login","Sign In","btn ghost sm")}</nav></header>`}
+const NAV=[["/dashboard","Dashboard","◧"],["/companies","Explore Companies","◎"],["/interviews","AI Mock Interviews","◐"],["/questions","Question Explorer","?"],["/gd","GD Arena","◍"],["/jobs","Job Opportunities","↗"],["/reports","My Reports","▤"],["/cv","My CV","▭"],["/progress","Progress","△"],["/settings","Account Settings","⚙"]];
+function appShell(inner,active){return `<div class="wrap"><header class="top"><a class="logo" href="#/dashboard"><i></i>ROLEVIA</a><nav class="nav" aria-label="Account"><span class="small muted" style="margin-right:6px">${esc(S.user.name)}</span><button class="btn ghost sm" data-act="logout">Sign out</button></nav></header>
+<div class="shell"><nav class="side" aria-label="App">${NAV.map(([h,t,i])=>`<a href="#${h}" ${active===h?'aria-current="page"':""}><span aria-hidden="true" style="width:18px;text-align:center">${i}</span>${t}</a>`).join("")}</nav><main class="main">${inner}</main></div></div>`}
+function pubShell(inner){return `<div class="wrap">${pubHead()}<main class="page">${inner}</main>${footer()}</div>`}
+const crumbs=a=>`<div class="crumbs">${a.map(([h,t])=>h?`<a href="#${h}">${esc(t)}</a>`:esc(t)).join(" / ")}</div>`;
+const head=(t,s)=>`<div class="pagehead"><h2>${t}</h2>${s?`<p class="muted">${s}</p>`:""}</div>`;
+const loading=m=>`<div class="card row" role="status"><span class="spin"></span><span>${esc(m||"Loading…")}</span></div>`;
+const AIPILL=`<span class="pill ai" title="Generated by Claude from general knowledge. Not verified against live sources.">AI-generated · unverified</span>`;
+const aiNote=`<div class="note">AI-generated from Claude's general knowledge. ROLEVIA has no live web or interview-review feed connected, so nothing here is a verified or candidate-reported fact. Check the company's own site before relying on it.</div>`;
+
+/* ---------- router ---------- */
+const ROUTES=[];const R=(re,fn)=>ROUTES.push([re,fn]);
+let cleanup=null;
+let RT=0;
+function go(h){const t="#"+h;if(location.hash!==t)location.hash=t;render()}
+function errCard(err){return pubShell(`<div class="empty" style="margin-top:40px"><h3>This page could not load</h3><p class="muted">${esc((err&&err.message)||"Unexpected error")}</p><p style="margin-top:14px"><button class="btn pri" data-act="reload">Try again</button> ${A("/dashboard","Go to dashboard","btn ghost")}</p></div>`)}
+async function render(){cvVerify();
+ const my=++RT;
+ if(cleanup){try{cleanup()}catch(e){}cleanup=null}
+ let path=(location.hash||"#/").slice(1)||"/";path=path.split("?")[0];if(path.length>1)path=path.replace(/\/$/,"");
+ try{
+ for(const [re,fn] of ROUTES){const m=path.match(re);if(m){let pg;try{pg=await fn(...m.slice(1).map(x=>x===undefined?undefined:decodeURIComponent(x)))}catch(err){if(!S.user){S.next=path;return go("/login")}throw err}
+  if(my!==RT)return;
+  if(pg.private&&!S.user){S.next=path;return go("/login")}
+  const app=$("#app");app.className=pg.lp?"lp":"";app.innerHTML=pg.private?appShell(pg.html,pg.nav):pubShell(pg.html);
+  if(pg.title)document.title=pg.title+" · ROLEVIA";else document.title="ROLEVIA";
+  window.scrollTo(0,0);if(pg.mount)cleanup=pg.mount()||null;return}}
+ $("#app").innerHTML=pubShell(`<div class="empty" style="margin-top:40px"><h3>Page not found</h3><p class="muted">That address does not match a ROLEVIA page.</p><p style="margin-top:14px">${A("/","Go home","btn pri")}</p></div>`);
+ }catch(err){console.error(err);if(my===RT){const app=$("#app");app.className="";app.innerHTML=errCard(err)}}
+}
+addEventListener("hashchange",()=>{render()});
+/* click + submit delegation */
+const ACT={};const FORM={};
+document.addEventListener("click",e=>{const t=e.target.closest("[data-act]");if(!t)return;const f=ACT[t.dataset.act];if(f){e.preventDefault();f(t,e)}});
+document.addEventListener("submit",e=>{const t=e.target.closest("[data-form]");if(!t)return;e.preventDefault();const f=FORM[t.dataset.form];if(f)f(t,Object.fromEntries(new FormData(t)),e)});
+ACT.reload=()=>render();
+ACT.logout=()=>{S.user=null;save();toast("Signed out");go("/")};
+</script>
