@@ -1,9 +1,12 @@
 <script>
 /* ---------- pricing ---------- */
-R(/^\/pricing$/,()=>({title:"Pricing",html:`${crumbs([["/","Home"],[null,"Pricing"]])}${head("Pricing","Proposed prices to test, not validated market rates. Plans and limits are configured in one place in the code.")}
-<div class="note" style="margin-bottom:16px"><b>Checkout is not available.</b> No payment gateway is configured, so no plan can be purchased and no payment is simulated. Everyone is on the Free plan.</div>
-<div class="grid g3">${PLANS_ASC.map(p=>`<div class="card stack"><h3>${p.name}</h3><div><span class="score" style="font-size:32px">${p.price}</span><span class="muted"> ${p.per}</span></div><ul class="stack" style="margin:0;padding-left:20px;flex:1">${p.feats.map(f=>`<li>${f}</li>`).join("")}</ul>${p.id==="free"?A(S.user?"/dashboard":"/signup",S.user?"Your current plan":"Start free","btn pri"):p.id==="college"?A("/contact","Contact for colleges","btn ghost"):`<button class="btn ghost" disabled>Checkout unavailable</button>`}</div>`).join("")}</div>
-<p class="small muted" style="margin-top:14px">Longer term, revenue is expected from student subscriptions and from university and placement-cell partnerships.</p>`}));
+R(/^\/pricing$/,()=>{const site=typeof SITE!=="undefined"&&SITE.on,payOn=site&&SITE.cfg.payments,bal=site&&S.user&&SITE.summary;
+ const banner=site?(payOn?`<div class="note info" style="margin-bottom:16px">Payments are processed by Razorpay (INR). Sessions are added to your account as soon as the payment is confirmed. ${bal?`<b>You have ${SITE.summary.interviews} interview${SITE.summary.interviews==1?"":"s"} and ${SITE.summary.gd} group GD session${SITE.summary.gd==1?"":"s"} left.</b>`:""}</div>`:`<div class="note" style="margin-bottom:16px"><b>Checkout is not switched on yet.</b> The site owner still has to add payment keys, so plans cannot be bought and no payment is simulated.</div>`):`<div class="note" style="margin-bottom:16px"><b>Checkout is not available.</b> No payment gateway is configured, so no plan can be purchased and no payment is simulated. Everyone is on the Free plan.</div>`;
+ const btn=p=>p.id==="free"?A(S.user?"/dashboard":"/signup",S.user?"Included with your account":"Start free","btn pri"):p.id==="college"?A("/contact","Contact for colleges","btn ghost"):site&&payOn&&p.buyable?`<button class="btn pri" data-act="buy" data-plan="${p.id}">Buy ${p.price}</button>`:`<button class="btn ghost" disabled>${site?"Checkout not switched on":"Checkout unavailable"}</button>`;
+ return{title:"Pricing",html:`${crumbs([["/","Home"],[null,"Pricing"]])}${head("Pricing","Pay once per package. No auto-renewing subscriptions: Premium and Placement Pro are 30-day passes.")}
+${banner}<div id="paystat"></div>
+<div class="grid g3">${PLANS_ASC.map(p=>`<div class="card stack"><h3>${esc(p.name)}</h3><div><span class="score" style="font-size:32px">${p.price}</span><span class="muted"> ${p.per}</span>${p.usd?` <span class="pill">${p.usd}</span>`:""}</div><ul class="stack" style="margin:0;padding-left:20px;flex:1">${p.feats.map(f=>`<li>${f}</li>`).join("")}</ul>${btn(p)}</div>`).join("")}</div>
+<p class="small muted" style="margin-top:14px">Prices are in Indian rupees. The dollar figure is an approximate conversion (₹179 ≈ $1.88 at the time of writing) shown for reference; you are charged in INR. Cancel a booked group GD at least 1 hour before it starts and the session is returned to your account.</p>`}});
 
 /* ---------- jobs ---------- */
 R(/^\/jobs(?:\/([^/]+))?(?:\/([^/]+))?$/,(role,co)=>{const f={role:role||S.profile.roles[0]||"",co:co||"",loc:"",type:"",ind:""};
@@ -118,5 +121,5 @@ ACT.export=async()=>{const st=$("#setstat");let dl=null;try{dl=await window.clau
 ACT.wipe=t=>{if(!t.dataset.sure){t.dataset.sure=1;t.textContent="Confirm: delete everything";return}try{localStorage.removeItem(KEY)}catch(e){}mem=null;Object.keys(S).forEach(k=>delete S[k]);Object.assign(S,{user:null,profile:{level:"",roles:[],industries:[],goals:[],targets:[]},cv:null,bookmarks:[],lists:[],qlib:[],reports:[],sessions:[],companies:{},recent:[],gdReports:[],gdBookings:{}});toast("All local data deleted");go("/")};
 
 /* ---------- boot ---------- */
-render();initCaps().then(()=>{if(/^#\/(gd|dashboard)/.test(location.hash))render()});
+if(typeof SITE!=="undefined"&&SITE.on)SITE.boot();else{render();initCaps().then(()=>{if(/^#\/(gd|dashboard)/.test(location.hash))render()})}
 </script>

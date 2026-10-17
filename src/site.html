@@ -1,0 +1,192 @@
+<script>
+/* ---------- website backend layer (Supabase auth + database, Razorpay checkout) ----------
+   Only active on the hosted website when /api/config reports a configured backend.
+   In the Claude artifact (no ROLEVIA_SITE) none of this runs and the app behaves as before. */
+const SITE=(function(){
+ const cfg=window.ROLEVIA_CFG||{backend:false,payments:false};
+ const lib=window.supabase;
+ const problem=!window.ROLEVIA_SITE?"":!cfg.backend?"The database is not connected yet (Supabase settings are missing).":!(lib&&lib.createClient)?"The sign-in library could not be loaded. Check your connection and reload.":"";
+ const on=!!(window.ROLEVIA_SITE&&cfg.backend&&lib&&lib.createClient);
+ const sb=on?lib.createClient(cfg.supabaseUrl,cfg.supabaseAnonKey,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true,flowType:"pkce"}}):null;
+ const T={cfg,on,sb,problem,summary:null,summaryErr:null};
+ window.ROLEVIA_AUTH={token:async()=>{if(!sb)return null;try{const {data}=await sb.auth.getSession();return data.session?data.session.access_token:null}catch(e){return null}}};
+ if(!on)return T;
+
+ /* ----- messages ----- */
+ T.msg=e=>{const m=String((e&&(e.message||e.code))||e||"");
+  if(/no_credits/.test(m))return"You have no sessions left for this. Get more on the Pricing page.";
+  if(/daily_limit/.test(m))return"You have reached today's limit of 5 solo GD practices. Try again tomorrow.";
+  if(/not_signed_in|JWT|expired/i.test(m))return"Please sign in again.";
+  if(/already_booked/.test(m))return"You already have a seat in this session.";
+  if(/conflict/.test(m))return"You already have a session at an overlapping time.";
+  if(/started/.test(m))return"This session has already started.";
+  if(/too_far/.test(m))return"You can book up to 8 days ahead.";
+  if(/bad_slot/.test(m))return"That is not a valid session time.";
+  if(/full/.test(m))return"This session is full.";
+  if(/Failed to fetch|NetworkError|network/i.test(m))return"Network problem. Check your connection and try again.";
+  return"Something went wrong. Please try again."};
+
+ /* ----- identity ----- */
+ const nameOf=u=>(u.user_metadata&&u.user_metadata.name)||String(u.email||"").split("@")[0]||"Member";
+ function resetLocal(){Object.assign(S,{cv:null,bookmarks:[],lists:[],qlib:[],reports:[],sessions:[],companies:{},recent:[],gdReports:[],gdBookings:{},research:{},profile:{level:"",roles:[],industries:[],goals:[],targets:[]}})}
+ T.adopt=u=>{if(S.owner&&S.owner!==u.id)resetLocal();S.owner=u.id;S.user={name:nameOf(u),email:u.email,id:u.id};S.account=S.user;VIEW.me={id:u.id,name:S.user.name};VIEW.db=dbShim;VIEW.room=roomShim;VIEW.canEdit=false;save()};
+ T.drop=()=>{S.user=null;VIEW.me=null;VIEW.db=null;VIEW.room=null;T.summary=null;AI_CTX.id=null;save()};
+ function localSessionUser(){try{for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(/^sb-.*-auth-token$/.test(k)){const v=JSON.parse(localStorage.getItem(k));if(v&&v.user&&v.user.id)return v.user}}}catch(e){}return null}
+
+ T.signup=async(name,email,password)=>{const b=$("#sbtn"),er=$("#serr");if(b){b.disabled=true;b.textContent="Creating…"}
+  try{const {data,error}=await sb.auth.signUp({email,password,options:{data:{name},emailRedirectTo:location.origin+"/"}});
+   if(error){if(er)er.textContent=/registered|exists/i.test(error.message)?"That email already has an account. Sign in instead.":/password/i.test(error.message)?"Choose a stronger password (at least 8 characters).":/rate/i.test(error.message)?"Too many attempts. Wait a few minutes and try again.":"Could not create the account: "+error.message;return}
+   if(data.session){T.adopt(data.user);await T.refresh();go("/onboarding")}
+   else{S.pendingEmail=email;save();go("/verify-email")}
+  }catch(e){if(er)er.textContent=T.msg(e)}finally{if(b){b.disabled=false;b.textContent="Create account"}}};
+ T.login=async(email,password)=>{const b=$("#lbtn"),er=$("#lerr");if(b){b.disabled=true;b.textContent="Signing in…"}
+  try{const {data,error}=await sb.auth.signInWithPassword({email,password});
+   if(error){if(er)er.textContent=/confirm/i.test(error.message)?"Confirm your email first: open the link we sent you, then sign in.":/invalid/i.test(error.message)?"Email or password is wrong.":/rate/i.test(error.message)?"Too many attempts. Wait a few minutes and try again.":"Could not sign in: "+error.message;return}
+   T.adopt(data.user);await T.refresh();const n=S.next;S.next=null;go(n||(S.profile.level?"/dashboard":"/onboarding"))
+  }catch(e){if(er)er.textContent=T.msg(e)}finally{if(b){b.disabled=false;b.textContent="Sign in"}}};
+ T.forgot=async email=>{const er=$("#ferr"),ok=$("#fok");try{const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+"/"});if(error&&/rate/i.test(error.message)){er.textContent="Too many requests. Wait a few minutes.";return}ok.innerHTML=`<div class="note ok" role="status">If an account exists for ${esc(email)}, a reset link is on its way.</div>`}catch(e){er.textContent=T.msg(e)}};
+ T.resetPassword=async pw=>{const er=$("#rerr");try{const {error}=await sb.auth.updateUser({password:pw});if(error){er.textContent="Could not save: "+error.message;return}toast("Password updated");go("/dashboard")}catch(e){er.textContent=T.msg(e)}};
+ const _logout=ACT.logout;
+ ACT.logout=async()=>{try{await sb.auth.signOut()}catch(e){}T.drop();toast("Signed out");go("/")};
+
+ /* ----- balances and sessions ----- */
+ T.refresh=async()=>{if(!S.user)return null;try{const {data,error}=await sb.rpc("my_summary");if(error)throw error;T.summary=data;T.summaryErr=null}catch(e){T.summaryErr=T.msg(e)}return T.summary};
+ T.startSession=async(kind,meta)=>{const {data,error}=await sb.rpc("start_session",{p_kind:kind,p_meta:meta||{}});if(error)throw error;T.refresh();return data};
+ T.closeSession=async(id,status)=>{try{await sb.rpc("close_session",{p_id:id,p_status:status})}catch(e){}T.refresh().then(()=>{if(/^#\/(dashboard|pricing)/.test(location.hash))render()})};
+ T.dashCard=()=>{const s=T.summary;
+  const body=s?`<div class="grid g2"><div><div class="score">${s.interviews}</div><div class="small muted">AI interview${s.interviews==1?"":"s"} left</div></div><div><div class="score">${s.gd}</div><div class="small muted">group GD${s.gd==1?"":"s"} left</div></div></div>
+   ${(s.grants||[]).filter(g=>g.expires).slice(0,2).map(g=>`<div class="small muted">${g.remaining} ${g.kind==="gd"?"GD":"interview"}${g.remaining==1?"":"s"} expire${g.remaining==1?"s":""} ${fmtDate(g.expires)}</div>`).join("")}
+   <div class="small muted">${s.completedInterviews} interview${s.completedInterviews==1?"":"s"} completed · ${S.reports.length} report${S.reports.length==1?"":"s"} saved in this browser</div>
+   ${s.interviews<1||s.gd<1?`<div class="note small">${s.interviews<1&&s.gd<1?"You are out of sessions.":s.interviews<1?"You are out of interviews.":"You are out of group GDs."} ${A("/pricing","See packages")}</div>`:""}`
+   :T.summaryErr?`<div class="note bad small" role="alert">${esc(T.summaryErr)} <button class="btn ghost sm" data-act="sitereload">Retry</button></div>`:loading("Loading your sessions…");
+  return`<div class="card stack"><div class="row between"><h3>Your sessions</h3>${A("/pricing","Get more","small")}</div>${body}</div>`};
+ ACT.sitereload=async()=>{T.summaryErr=null;await T.refresh();render()};
+ T.gdNote=()=>{const s=T.summary;if(!s)return`<p class="small muted">Booking uses 1 group GD session.</p>`;
+  return s.gd<1?`<div class="note small">You have no group GD sessions left. ${A("/pricing","Get more")}</div>`:`<p class="small muted">Booking uses 1 of your ${s.gd} group GD session${s.gd==1?"":"s"}. Cancel at least 1 hour before the start to get it back.</p>`};
+
+ /* ----- database shim: the document API the GD pages use, backed by Postgres functions ----- */
+ const seatDoc=r=>({id:"seat_"+r.slot_ms+"_"+r.n,data:{kind:"seat",slot:Number(r.slot_ms),n:Number(r.n),uid:r.user_id,name:r.name,pref:r.pref,at:Number(r.at_ms)}});
+ async function listCol(name){
+  const out=[];
+  if(name==="gdbookings"){const {data,error}=await sb.from("gd_seats").select("*");if(error)throw error;(data||[]).forEach(r=>out.push(seatDoc(r)))}
+  const {data,error}=await sb.rpc("kv_list",{p_col:name});if(error)throw error;(data||[]).forEach(r=>out.push({id:r.id,data:r.data}));
+  return out}
+ const snapOf=docs=>({docs:docs.map(d=>({id:d.id,data:()=>d.data})),empty:!docs.length});
+ const pollers=new Set();
+ function colRef(name,filters){return{
+  where(f,op,v){return colRef(name,filters.concat([[f,op,v]]))},
+  async get(){let d=await listCol(name);filters.forEach(([f,op,v])=>{d=d.filter(x=>op==="=="?x.data[f]===v:true)});return snapOf(d)},
+  onSnapshot(cb,errcb){let stop=false,last="",busy=false;
+   const tick=async()=>{if(stop||busy)return;busy=true;try{let d=await listCol(name);filters.forEach(([f,op,v])=>{d=d.filter(x=>op==="=="?x.data[f]===v:true)});const k=JSON.stringify(d);if(k!==last){last=k;if(!stop)cb(snapOf(d))}}catch(e){if(errcb&&!stop)errcb(e)}finally{busy=false}};
+   const p={tick};pollers.add(p);tick();const iv=setInterval(tick,3000);return()=>{stop=true;clearInterval(iv);pollers.delete(p)}}}}
+ T.poke=()=>pollers.forEach(p=>p.tick());
+ function docRef(name,id){const isSeat=name==="gdbookings"&&/^seat_/.test(id);return{
+  async get(){if(isSeat){const d=(await listCol(name)).find(x=>x.id===id);return{exists:!!d,id,data:()=>d?d.data:undefined}}
+   const {data,error}=await sb.rpc("kv_get",{p_col:name,p_id:id});if(error)throw error;return{exists:data!=null,id,data:()=>data||undefined}},
+  async set(obj){if(isSeat)throw new Error("Seats are booked through the booking function.");const {error}=await sb.rpc("kv_put",{p_col:name,p_id:id,p_data:obj});if(error)throw error},
+  async delete(){if(isSeat)throw new Error("Seats are cancelled through the cancel function.");const {error}=await sb.rpc("kv_delete",{p_col:name,p_id:id});if(error)throw error},
+  async acquire(o){const {data,error}=await sb.rpc("kv_acquire",{p_col:name,p_id:id,p_holder:String(o&&o.holder||""),p_ttl_ms:Math.min(Number(o&&o.ttlMs)||5000,300000)});if(error)throw error;return{acquired:data===true}}}}
+ const dbShim={collection:n=>colRef(n,[]),doc:path=>{const [c,...r]=path.split("/");return docRef(c,r.join("/"))}};
+
+ /* ----- waiting-room presence over Supabase Realtime ----- */
+ const roomShim={async join(name){
+  const ch=sb.channel("room:"+name,{config:{presence:{key:S.user.id}}});let mine={},subs=new Set(),ready=false;
+  const peers=()=>{const st=ch.presenceState();return Object.keys(st).map(k=>({id:k,kind:"viewer",presence:Object.assign({},...(st[k]||[]).map(x=>{const y=Object.assign({},x);delete y.presence_ref;return y}))}))};
+  ch.on("presence",{event:"sync"},()=>subs.forEach(f=>{try{f(peers())}catch(e){}}));
+  await new Promise((res,rej)=>{const to=setTimeout(()=>rej(new Error("room timeout")),8000);ch.subscribe(st=>{if(st==="SUBSCRIBED"){clearTimeout(to);ready=true;res()}else if(st==="CHANNEL_ERROR"||st==="TIMED_OUT"){clearTimeout(to);rej(new Error(st))}})});
+  return{presence:async p=>{mine=Object.assign({},mine,p);if(ready)await ch.track(mine)},onPeers:f=>{subs.add(f);return()=>subs.delete(f)},peers,leave:()=>{try{ch.untrack();sb.removeChannel(ch)}catch(e){}}}}};
+
+ /* ----- boot ----- */
+ T.boot=()=>{const u=localSessionUser();if(u)T.adopt(u);else if(S.user)T.drop();
+  render();
+  sb.auth.onAuthStateChange((ev,session)=>{setTimeout(()=>{
+   if(ev==="SIGNED_OUT"){if(S.user){T.drop();render()}}
+   else if(ev==="PASSWORD_RECOVERY"&&session){T.adopt(session.user);go("/reset-password")}
+   else if(session&&session.user&&(!S.user||S.user.id!==session.user.id)){T.adopt(session.user);T.refresh().then(()=>render())}},0)});
+  sb.auth.getSession().then(async({data})=>{const ses=data&&data.session;
+   if(!ses&&S.user){T.drop();render();return}
+   if(ses&&(!S.user||S.user.id!==ses.user.id)){T.adopt(ses.user)}
+   if(ses){await T.refresh();if(/^#\/(dashboard|pricing|gd|interviews)/.test(location.hash))render()}});};
+ return T;
+})();
+
+/* AI usage context and credit-gated starts */
+if(SITE.on){
+ initCaps=async function(){};
+ /* interviews: the server spends one credit when the interview starts and gates every AI call of that session */
+ const _sustart=ACT.sustart;
+ ACT.sustart=async(t,e)=>{
+  const P=SU.prep,er=$("#ierr");
+  if(!P||P.status!=="done"||!SU.mic||!SU.spk||P.key!==suKey())return _sustart(t,e);   // let the original show its own validation message
+  if(SU.starting)return;SU.starting=true;if(t){t.disabled=true;t.textContent="Starting…"}
+  try{const r=await SITE.startSession("interview",{company:(SU.v.company||"").slice(0,80),role:SU.v.role,mode:SU.v.mode||"standard"});SU.sid=r.id}
+  catch(err){SU.starting=false;if(er)er.innerHTML=esc(SITE.msg(err))+(/no_credits/.test(String(err&&err.message))?" "+A("/pricing","See packages"):"");if(t){t.disabled=false;t.textContent="Start interview"}return}
+  SU.starting=false;_sustart(t,e);
+  const s=S.sessions[0];if(s&&!s.serverId&&s.status==="active"){s.serverId=SU.sid;save()}};
+ const _liveMount=liveMount;
+ liveMount=function(s){AI_CTX.id=s.serverId||null;const c=_liveMount(s);return()=>{AI_CTX.id=null;if(typeof c==="function")c()}};
+ const _doFinish=doFinish;
+ doFinish=async function(s,room){AI_CTX.id=s.serverId||null;await _doFinish(s,room);
+  if(s.serverId&&s.status==="done"){const id=s.serverId;s.serverId=null;save();AI_CTX.id=null;SITE.closeSession(id,s.reportId?"completed":"abandoned")}};
+ /* solo GD practice */
+ const _soloprep=ACT.soloprep;
+ ACT.soloprep=async(t,e)=>{if(!SR)return;if(SOLO.sid)return _soloprep(t,e);
+  try{const r=await SITE.startSession("gd_solo",{topic:(SOLO.topic||"").slice(0,200)});SOLO.sid=r.id}catch(err){SOLO.err=SITE.msg(err);return drawSolo()}
+  _soloprep(t,e)};
+ const _soloScore=soloScore;
+ soloScore=async function(rep){const sid=SOLO.sid;if(sid)AI_CTX.id=sid;try{return await _soloScore(rep)}finally{if(sid){SOLO.sid=null;AI_CTX.id=null;SITE.closeSession(sid,"completed")}}};
+ const _soloReset=soloReset;
+ soloReset=function(){if(SOLO.sid&&SOLO.stage!=="result"){const sid=SOLO.sid;SOLO.sid=null;SITE.closeSession(sid,"abandoned")}_soloReset()};
+
+ /* group GD: seats are booked and cancelled by atomic database functions (6 per slot) */
+ gdClaim=async function(slot,pref){
+  const {data,error}=await SITE.sb.rpc("book_gd",{p_slot:new Date(slot).toISOString(),p_name:myName(),p_pref:pref||"random"});
+  if(error){const m=String(error.message||"");if(/already_booked/.test(m))return{ok:true,dup:true};if(/\bfull\b/.test(m))return{ok:false,full:true};return{ok:false,err:SITE.msg(error)}}
+  return{ok:true,taken:data&&data.taken}};
+ ACT.gdbook=async()=>{if(GSEL.busy||!GSEL.slot)return;const slot=GSEL.slot;
+  if(slot<=Date.now()){GSEL.msg="This session has already started. Pick a later slot.";return drawGdBook()}
+  if(SITE.summary&&SITE.summary.gd<1){GSEL.msg="You have no group GD sessions left. Get more on the Pricing page.";return drawGdBook()}
+  GSEL.busy=true;GSEL.msg="";drawGdBook();
+  try{const r=await gdClaim(slot,GSEL.pref);
+   if(r.ok){S.gdBookings[slot]={start:slot,label:"Group GD · "+gdCatLabel(GSEL.pref)};save();toast(r.dup?"You already have a seat in this session":"Seat booked");await SITE.refresh()}
+   else GSEL.msg=r.full?"This session just filled up. Pick another slot.":(r.err||"Booking failed. Try again.")}
+  catch(e){GSEL.msg=SITE.msg(e)}
+  GSEL.busy=false;SITE.poke();drawGdBook()};
+ async function cancelSeat(slot){const {data,error}=await SITE.sb.rpc("cancel_gd",{p_slot:new Date(slot).toISOString()});if(error)throw error;delete S.gdBookings[slot];save();await SITE.refresh();SITE.poke();return data}
+ ACT.gdcancel=async t=>{const slot=+t.dataset.t;if(!mySeat(slot))return;
+  try{const r=await cancelSeat(slot);toast(r&&r.refunded?"Seat cancelled. Your session was returned.":"Seat cancelled. It was less than 1 hour before the start, so the session is not returned.")}
+  catch(e){GSEL.msg=/started/.test(String(e&&e.message))?"The session has started, so it can no longer be cancelled.":SITE.msg(e)}
+  drawGdBook()};
+ ACT.gdcancel2=async t=>{const slot=+t.dataset.t;
+  try{await cancelSeat(slot);toast("Seat cancelled");go("/gd/group")}catch(e){toast(SITE.msg(e))}};
+
+ /* checkout */
+ const rzp=()=>window.Razorpay?Promise.resolve():new Promise((res,rej)=>{const s=document.createElement("script");s.src="https://checkout.razorpay.com/v1/checkout.js";s.onload=res;s.onerror=()=>rej(new Error("The payment window could not be loaded. Disable content blockers and try again."));document.head.appendChild(s)});
+ const pstat=(k,m)=>{const el=$("#paystat");if(el)el.innerHTML=k==="busy"?loading(m):`<div class="note ${k==="ok"?"ok":"bad"}" role="${k==="ok"?"status":"alert"}" style="margin-bottom:16px">${m}</div>`};
+ ACT.buy=async t=>{const plan=t.dataset.plan,pl=PLANS.find(p=>p.id===plan);if(!pl)return;
+  if(!S.user){S.next="/pricing";return go("/login")}
+  const btns=$$("[data-act=buy]");btns.forEach(b=>b.disabled=true);
+  const done=()=>btns.forEach(b=>b.disabled=false);
+  try{
+   pstat("busy","Creating your order…");
+   const token=await ROLEVIA_AUTH.token();
+   const r=await fetch("/api/pay/order",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+token},body:JSON.stringify({planId:plan})});
+   const j=await r.json().catch(()=>({}));
+   if(!r.ok){pstat("err",esc(j.error||"Could not start the payment."));return done()}
+   await rzp();
+   const before=SITE.summary?SITE.summary.gd+SITE.summary.interviews:0;
+   const box=new Razorpay({key:j.keyId,amount:j.amount,currency:j.currency,name:"ROLEVIA",description:j.planName,order_id:j.orderId,prefill:{name:S.user.name,email:S.user.email},theme:{color:"#111111"},
+    modal:{ondismiss:()=>{pstat("err","Payment cancelled. You were not charged.");done()}},
+    handler:async resp=>{pstat("busy","Confirming your payment…");
+     try{const v=await fetch("/api/pay/verify",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+(await ROLEVIA_AUTH.token())},body:JSON.stringify(resp)});
+      const vj=await v.json().catch(()=>({}));
+      if(!v.ok)throw new Error(vj.error||"Verification failed");
+      await SITE.refresh();pstat("ok",`<b>Payment confirmed.</b> ${esc(pl.name)} is now on your account. You have ${SITE.summary.interviews} interview${SITE.summary.interviews==1?"":"s"} and ${SITE.summary.gd} group GD${SITE.summary.gd==1?"":"s"} available. ${A("/interviews/new","Start an interview")} · ${A("/gd/group","Book a GD")}`)}
+     catch(err){pstat("err",`We received your payment (ID ${esc(resp.razorpay_payment_id||"")}) but could not confirm it just now (${esc(err.message)}). Your sessions are added automatically within a minute once the bank confirms. Refresh this page to check.`);
+      for(let i=0;i<8;i++){await new Promise(r=>setTimeout(r,4000));await SITE.refresh();if(SITE.summary&&SITE.summary.gd+SITE.summary.interviews>before){pstat("ok","<b>Payment confirmed.</b> Your sessions have been added.");break}}}
+     done()}});
+   box.on("payment.failed",x=>{pstat("err","Payment failed"+(x&&x.error&&x.error.description?": "+esc(x.error.description):"")+". You were not charged. Try again.");done()});
+   pstat("busy","Opening the payment window…");box.open();$("#paystat").innerHTML="";
+  }catch(err){pstat("err",esc(err.message||"Something went wrong."));done()}};
+}
+</script>

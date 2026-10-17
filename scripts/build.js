@@ -2,8 +2,11 @@
 // Usage: node scripts/build.js
 const fs = require("fs"), path = require("path"), vm = require("vm");
 const root = path.join(__dirname, "..");
-const ORDER = ["p1", "p2", "p3", "p4", "p5", "rs", "cvx", "iv", "p6", "p7"];
-const frag = ORDER.map(n => fs.readFileSync(path.join(root, "src", n + ".html"), "utf8")).join("");
+const ORDER = ["p1", "p2", "p3", "p4", "p5", "rs", "cvx", "iv", "p6", "site", "p7"];
+const plans = fs.readFileSync(path.join(root, "plans.json"), "utf8").trim();
+let frag = ORDER.map(n => fs.readFileSync(path.join(root, "src", n + ".html"), "utf8")).join("");
+if (!frag.includes("/*PLANS_JSON*/")) { console.error("PLANS marker missing"); process.exit(1); }
+frag = frag.replace("/*PLANS_JSON*/", JSON.stringify(JSON.parse(plans)));
 
 // syntax-check every inline script
 const scripts = [...frag.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
@@ -22,6 +25,7 @@ const html = `<!doctype html>
 <meta name="description" content="ROLEVIA: company-specific, CV-based voice interview practice, group discussion practice and preparation tracking.">
 ${head}
 <script>window.ROLEVIA_SITE=true;</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="/claude-shim.js"></script>
 </head>
 <body>

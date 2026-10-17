@@ -26,15 +26,8 @@ function cvVerify(){if(S.cv&&!cvValid(S.cv)){S.cv=null;S.cvDiscarded=true;try{sa
 cvVerify();
 
 /* ---------- config: plans are data, not code ---------- */
-const PLANS=[
- {id:"free",name:"Free",amount:0,price:"₹0",per:"/month",limits:{interviews:3,gd:1},feats:["3 AI mock interviews free for a year","Basic company research","1 live GD per month","Basic feedback"]},
- {id:"premium",name:"Premium",amount:799,price:"₹799",per:"/month",limits:{interviews:30,gd:4},feats:["30 AI mock interviews per month","Detailed company-specific preparation","CV-based questions and feedback","4 live GD sessions per month","Progress tracking and preparation plans"]},
- {id:"pro",name:"Placement Pro",amount:599,price:"₹599",per:"/month",limits:{interviews:60,gd:8},feats:["Higher interview usage limits","Advanced role-specific preparation","8 live GD sessions per month","Detailed analytics and personalised preparation","Priority GD booking"]},
- {id:"gd",name:"Individual GD",amount:179,price:"₹179",per:"/session",limits:{},feats:["1 scheduled live GD session with real candidates","Individual AI feedback"]},
- {id:"gd3",name:"3 GD Session Pack",amount:537,price:"₹537",per:"/pack of 3",limits:{},sessions:3,feats:["3 scheduled live GD sessions (₹179 each, no discount applied)","Individual AI feedback after every session","Book any 3 slots, one per slot"]},
- {id:"college",name:"College Plan",amount:1799,price:"From ₹1,799",per:"/student/year",limits:{},feats:["Student interview and GD preparation","Placement-cell dashboard","Aggregate, privacy-conscious insights"]}
-];
-const PLANS_ASC=PLANS.slice().sort((a,b)=>a.amount-b.amount);
+const PLANS=(/*PLANS_JSON*/).map(x=>({...x,amount:x.amountInr}));
+const PLANS_ASC=PLANS.slice().sort((a,b)=>a.amount-b.amount||a.name.localeCompare(b.name));
 const ROLES=["Marketing","Finance","Consulting","Sales","Product Management","Operations","Technology","Human Resources","Data & Analytics"];
 const INDUSTRIES=["Consulting","Banking & Finance","FMCG","Technology","Manufacturing & Steel","E-commerce","Healthcare & Pharma","Automotive","Media & Advertising","Retail & Apparel"];
 const ROUNDS=["HR / Behavioural","Case / Problem solving","Technical / Role knowledge","Managerial","Final / Leadership"];
@@ -51,9 +44,10 @@ function suggest(q){q=q.toLowerCase().trim();if(!q)return[];
 
 /* ---------- AI boundary (viewer's own Claude via the sample capability) ---------- */
 let _sample;const getSample=async()=>{if(_sample!==undefined)return _sample;try{_sample=await window.claude.use("sample")}catch(e){_sample=null}return _sample};
-const AIERR={not_granted:"Claude access was declined for this page. Allow it to use AI features.",sampling_disabled:"Claude is not available for this account or organisation.",rate_limited:"Too many requests, or your usage limit was reached. Try again shortly.",session_expired:"Your session expired. Sign in again.",unavailable:window.ROLEVIA_SITE?"The AI service is not reachable right now. Check your connection, or try again later. The site owner may not have configured it yet.":"AI is not available in this view. Open the page inside Claude to enable it.",invalid_json:"The AI reply could not be read. Try again.",upstream_error:"The AI service had a problem. Try again.",cancelled:"Cancelled."};
+const AIERR={not_granted:"Claude access was declined for this page. Allow it to use AI features.",sampling_disabled:"Claude is not available for this account or organisation.",rate_limited:"Too many requests, or your usage limit was reached. Try again shortly.",session_expired:"Your session expired. Sign in again.",unavailable:window.ROLEVIA_SITE?"The AI service is not reachable right now. Check your connection, or try again later. The site owner may not have configured it yet.":"AI is not available in this view. Open the page inside Claude to enable it.",invalid_json:"The AI reply could not be read. Try again.",upstream_error:"The AI service had a problem. Try again.",cancelled:"Cancelled.",session_closed:"This session is already finished.",session_cap:"This session reached its AI limit.",bad_session:"This session could not be verified. Start a new one.",daily_cap:"You reached today's AI limit. Try again tomorrow.",no_credits:"You have no sessions left for this. See Pricing to get more."};
 const aiMsg=e=>AIERR[e&&e.code]||"Something went wrong. Try again.";
-async function ai(prompt,o={}){const sm=await getSample();if(!sm)throw{code:"unavailable"};return sm.json(prompt,{modelTier:o.tier||"default",cache:o.cache===false?false:undefined,signal:o.signal})}
+const AI_CTX={id:null};
+async function ai(prompt,o={}){const sm=await getSample();if(!sm)throw{code:"unavailable"};return sm.json(prompt,{modelTier:o.tier||"default",cache:o.cache===false?false:undefined,signal:o.signal,sessionId:o.sessionId===undefined?AI_CTX.id:o.sessionId})}
 const aiOn=async()=>!!(await getSample());
 
 /* ---------- identity: viewer-level (claude.ai) data for GD ---------- */

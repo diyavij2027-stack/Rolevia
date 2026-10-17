@@ -3,13 +3,14 @@
 const avg=a=>a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length):null;
 const liveSession=()=>S.sessions.find(s=>s.status==="active"||s.status==="paused");
 R(/^\/dashboard$/,()=>{const rp=S.reports.slice(0,3),ls=liveSession(),ready=avg(S.reports.slice(0,5).map(r=>r.overall));
- const gd=Object.entries(S.gdBookings).map(([id,b])=>({id,...b})).filter(b=>/^\d+$/.test(b.id)&&b.start>Date.now()-3600e3).sort((a,b)=>a.start-b.start).slice(0,3);
+ const gd=(typeof SITE!=="undefined"&&SITE.on&&SITE.summary)?SITE.summary.bookings.map(b=>({id:String(b.slot),start:b.slot,label:"Group GD · "+gdCatLabel(b.pref)})).filter(b=>b.start>Date.now()-3600e3).slice(0,3):Object.entries(S.gdBookings).map(([id,b])=>({id,...b})).filter(b=>/^\d+$/.test(b.id)&&b.start>Date.now()-3600e3).sort((a,b)=>a.start-b.start).slice(0,3);
  const steps=[];if(!S.profile.level)steps.push(["Finish your preferences","/onboarding"]);if(!S.reports.length)steps.push(["Run your first AI mock interview","/interviews/new"]);if(!S.cv)steps.push(["Add your CV for personalised questions (optional)","/cv"]);if(!gd.length)steps.push(["Book a live group discussion","/gd"]);if(S.reports.length&&!S.bookmarks.length)steps.push(["Bookmark questions you want to revise","/questions"]);
  const role=S.profile.roles[0]||"";
  return{private:true,nav:"/dashboard",title:"Dashboard",html:`
 <div class="panel notch stack" style="padding:28px 28px 30px"><span class="eyebrow" style="color:var(--muted)">Dashboard</span><h2 style="font-size:clamp(24px,4vw,36px)">Welcome, ${esc(S.user.name.split(" ")[0])}</h2>
 <div class="row">${ls?`<a class="btn lav" href="#/interviews/live/${ls.id}">Resume interview at ${esc(ls.company)}</a>`:`<a class="btn lav" href="#/interviews/new">Start a mock interview</a>`}<a class="btn" style="background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--line)" href="#/companies">Explore companies</a></div></div>
 <div class="grid g2" style="margin-top:16px">
+ ${typeof SITE!=="undefined"&&SITE.on?SITE.dashCard():""}
  <div class="card stack"><div class="row between"><h3>Interview readiness</h3>${A("/progress","Progress","small")}</div>
   ${ready==null?`<div class="empty" style="padding:18px"><p class="muted">No interviews yet. Your readiness score appears after your first completed mock.</p></div>`:`<div><span class="score">${ready}</span><span class="muted"> / 100 average of last ${Math.min(5,S.reports.length)}</span></div><div class="bar"><i style="width:${ready}%"></i></div><p class="small muted">Practice score only. It does not predict hiring outcomes.</p>`}</div>
  <div class="card stack"><h3>Recommended next steps</h3>${steps.length?steps.slice(0,4).map(([t,h])=>`<a class="row between" style="text-decoration:none;padding:8px 0;border-bottom:1px solid var(--line)" href="#${h}"><span>${t}</span><span aria-hidden="true">→</span></a>`).join(""):`<p class="muted">You are up to date. Run another interview to keep improving.</p>`}</div>
