@@ -24,7 +24,7 @@ function gdSub(onChange){gdUnsubs.forEach(u=>u());gdUnsubs=[];if(!VIEW.db)return
   gdUnsubs.push(VIEW.db.collection("gdreports").onSnapshot(s=>{GDR=s.docs.map(d=>({id:d.id,...d.data()}));onChange()},()=>{}))}catch(e){}}
 const seats=slot=>GDB.filter(d=>d.kind==="seat"&&d.slot===slot).sort((a,b)=>a.n-b.n);
 const mySeat=slot=>seats(slot).find(d=>d.uid===myId());
-const gdNeedDb=window.ROLEVIA_SITE?`<div class="note"><b>Group sessions need a shared database, which this website does not have yet.</b> Booking and joining are switched off rather than faked. Individual practice works without it.</div>`:`<div class="note"><b>Group sessions need the shared database and your claude.ai sign-in.</b> They are not available in this view. Open the page signed in to claude.ai to book and join. Individual practice works without it.</div>`;
+const gdNeedDb=window.ROLEVIA_SITE?`<div class="note"><b>Group sessions are not switched on for this site yet.</b> Live booking needs the site database (Supabase) to be connected by the site owner, and you need to be signed in with a site account. Booking is switched off rather than faked. Individual practice works without it.</div>`:`<div class="note"><b>Group sessions need the shared database and your claude.ai sign-in.</b> They are not available in this view. Open the page signed in to claude.ai to book and join. Individual practice works without it.</div>`;
 
 /* ---------- GD home: two options ---------- */
 R(/^\/gd$/,()=>({private:true,nav:"/gd",title:"GD Arena",html:`${head("Group discussion practice","Choose how you want to practise.")}
