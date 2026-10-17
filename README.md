@@ -1,53 +1,44 @@
 # ROLEVIA
 
-Company-specific, CV-based interview preparation. Upload your CV, pick a company, domain and role, and practise a **voice-only** mock interview whose questions come from your CV and from public interview research. Also includes solo GD practice, a question explorer, reports and progress tracking.
+Voice-based interview practice (company- and CV-specific, plus a separate situational and case round), group-discussion practice with live 6-person slots, strict evidence-based reports, and Razorpay payments.
 
-## What works on the website
+Static front end (`index.html`, built from `src/*.html`) + Vercel serverless functions (`api/`) + Supabase (auth, credits, bookings) + Google Gemini (AI, grounded company research) + Razorpay (payments).
 
-| Feature | Status |
-|---|---|
-| Landing, sign-up/sign-in, onboarding, dashboard, progress, reports | Works. Data is stored in the visitor's own browser (localStorage). There is no server-side account system. |
-| CV upload (PDF/DOCX), parsing, CV analysis | Works. Files are read in the browser; only extracted text is saved locally. |
-| Voice mock interview (company + CV based) | Works in browsers with speech recognition and speech synthesis (Chrome/Edge). Needs the AI proxy for adaptive questions and scoring; without it a rule-based fallback is used and scoring is unavailable. |
-| Solo GD practice, Question Explorer | Works; AI scoring/generation needs the AI proxy. |
-| Group GD sessions (booking, waiting room, shared evaluation) | **Switched off** on this site: they need a shared database and realtime channel that this deployment does not include. |
-| Payments | **Not implemented.** The pricing page is informational; there is no checkout. |
+## Set-up (about 20 minutes)
 
-### Research data
-There is no live web research. `src/rs.html` holds hand-collected, source-linked public interview reports for 8 companies (Tata Steel, JSW Steel, Puma, Deloitte, HUL, Amazon, Flipkart, Accenture). The evidence is anecdotal. Other companies get an AI briefing clearly labelled as not company-reported.
+1. **Supabase**: create a project. In *SQL Editor* run `supabase/schema.sql`, then `supabase/plans_seed.sql` (this order, before any user signs up). In *Authentication > URL configuration* set *Site URL* to your Vercel URL and add `https://YOUR-SITE/**` to redirect URLs. For the quickest testing you can turn off *Confirm email*.
+2. **Vercel** > Project > Settings > Environment Variables (tick Production, Preview and Development), then **redeploy**:
+   `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and for payments `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`.
+3. **Razorpay** (test mode first): create a webhook to `https://YOUR-SITE/api/pay/webhook` for events `payment.captured` and `order.paid`, using the same secret as `RAZORPAY_WEBHOOK_SECRET`.
+4. Open `https://YOUR-SITE/api/ai` : it should show `"ok": true`. If not, the JSON says which variable is missing.
 
-## Structure
+The service-role key is only used inside `api/` functions. The browser receives only the public anon key (via `/api/config`).
+
+## What is enforced on the server
+
+- Free plan: **1 interview + 1 group GD** per account (granted by a database trigger on sign-up).
+- Every AI call is tied to a signed-in user and, for interviews and solo GDs, to a started session; per-session and daily caps apply. Starting a session spends a credit in the same transaction; abandoned sessions with almost no AI use are refunded.
+- Group GD: **max 6 per slot**, one seat per user per slot, no seats within 30 minutes of another booking, slots aligned to 30 minutes and up to 8 days ahead, booking spends a GD credit, cancelling at least 1 hour before the start refunds it. All inside one transaction with a per-slot lock (tested with 28 parallel requests: exactly 6 seats).
+- Payments: the amount is read from the `plans` table on the server, never from the browser. Signatures are verified (HMAC-SHA256) for the checkout callback and the webhook; granting is idempotent.
+
+## Pricing (single source: `plans.json`)
+
+Edit `plans.json`, run `node scripts/build.js` (also regenerates `supabase/plans_seed.sql`), re-run the seed SQL, and push. The website, checkout and database all read from it.
+
+## Develop and test
 
 ```
-index.html          built single-page app (generated, committed)
-claude-shim.js      browser adapter: AI -> /api/ai, downloads -> normal download
-api/ai.js           serverless proxy to the Google Gemini API (key stays server-side)
-src/*.html          app source parts (concatenated in order p1,p2,p3,p4,p5,rs,cvx,iv,p6,p7)
-scripts/build.js    node scripts/build.js  -> regenerates index.html and syntax-checks
-vercel.json         function timeout + security headers
-```
-
-## Deploy (Vercel, free tier works)
-
-1. Import this repo at <https://vercel.com/new>. No framework, no build command, no output directory.
-2. Add the environment variable **`GEMINI_API_KEY`** (a free key from <https://aistudio.google.com/apikey>) (Project Settings → Environment Variables).
-3. Deploy. Visit `/api/ai` — it should return `{"ok":true}`.
-
-Optional variables: `ALLOWED_ORIGINS` (comma-separated origins allowed to call the proxy), `RATE_LIMIT_PER_10MIN` (default 40 per IP, best effort per warm instance), `MODEL_QUICK`, `MODEL_DEFAULT`, `MODEL_COMPLEX` (defaults: `gemini-3.5-flash-lite`, `gemini-3.8-flash`, `gemini-3.8-flash`, which Google lists as free-tier).
-
-> **Free-tier notes:** the Gemini free tier has per-minute and per-day request limits shared by all visitors of your site, so heavy use returns a "too many requests" message (the app retries once, then asks the user to wait). On the free tier Google may use prompts and replies (including CV text) to improve its products; see <https://ai.google.dev/gemini-api/docs/pricing>. The site tells users this on the CV upload screen. Set `ALLOWED_ORIGINS` to your site's address so others cannot use your key from elsewhere.
-
-GitHub Pages can host the static files but cannot run `api/ai.js`, so AI features would be off there.
-
-## Develop
-
-```bash
-# edit src/*.html, then
-node scripts/build.js
-npx vercel dev      # serves index.html and /api/ai locally (needs GEMINI_API_KEY in .env)
+node scripts/build.js          # builds index.html and plans_seed.sql
+npm i pg @electric-sql/pglite jsdom   # test-only, not needed to deploy
+node tests/db-logic.pglite.test.mjs
+node tests/db-concurrency.postgres.test.mjs   # needs a local Postgres
+node tests/api.postgres.test.mjs
+node tests/t_front1.mjs ... t_nocv.mjs        # jsdom front-end tests against a real Postgres
 ```
 
 ## Known limits
-- Real microphone/speech recognition quality depends on the browser; unsupported browsers see a clear message.
-- PDF/DOCX parsing libraries (pdf.js, mammoth) load from cdnjs.
-- Practice scores and rankings are AI estimates for practice only, not hiring predictions.
+
+- Reports, transcripts and the CV are stored in the user's browser (not synced across devices).
+- Group-GD scoring is run by one participant's browser (elected by a lease); a malicious participant could tamper with it. Move it to a server function before using results for anything high-stakes.
+- Free-tier Gemini data may be used by Google to improve its products (disclosed in the app).
+- Self-service deletion of the server-side account is not built yet.
