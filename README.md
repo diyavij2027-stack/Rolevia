@@ -21,7 +21,7 @@ There is no live web research. `src/rs.html` holds hand-collected, source-linked
 ```
 index.html          built single-page app (generated, committed)
 claude-shim.js      browser adapter: AI -> /api/ai, downloads -> normal download
-api/ai.js           serverless proxy to the Anthropic API (key stays server-side)
+api/ai.js           serverless proxy to the Google Gemini API (key stays server-side)
 src/*.html          app source parts (concatenated in order p1,p2,p3,p4,p5,rs,cvx,iv,p6,p7)
 scripts/build.js    node scripts/build.js  -> regenerates index.html and syntax-checks
 vercel.json         function timeout + security headers
@@ -30,12 +30,12 @@ vercel.json         function timeout + security headers
 ## Deploy (Vercel, free tier works)
 
 1. Import this repo at <https://vercel.com/new>. No framework, no build command, no output directory.
-2. Add the environment variable **`ANTHROPIC_API_KEY`** (Project Settings → Environment Variables).
+2. Add the environment variable **`GEMINI_API_KEY`** (a free key from <https://aistudio.google.com/apikey>) (Project Settings → Environment Variables).
 3. Deploy. Visit `/api/ai` — it should return `{"ok":true}`.
 
-Optional variables: `ALLOWED_ORIGINS` (comma-separated origins allowed to call the proxy), `RATE_LIMIT_PER_10MIN` (default 40 per IP, best effort per warm instance), `MODEL_QUICK`, `MODEL_DEFAULT`, `MODEL_COMPLEX`.
+Optional variables: `ALLOWED_ORIGINS` (comma-separated origins allowed to call the proxy), `RATE_LIMIT_PER_10MIN` (default 40 per IP, best effort per warm instance), `MODEL_QUICK`, `MODEL_DEFAULT`, `MODEL_COMPLEX` (defaults: `gemini-3.5-flash-lite`, `gemini-3.8-flash`, `gemini-3.8-flash`, which Google lists as free-tier).
 
-> **Cost warning:** the proxy spends *your* API credits for every visitor. Set a spend limit on the key in the Anthropic console, and set `ALLOWED_ORIGINS` to your site. For real public traffic, add sign-in-based quotas.
+> **Free-tier notes:** the Gemini free tier has per-minute and per-day request limits shared by all visitors of your site, so heavy use returns a "too many requests" message (the app retries once, then asks the user to wait). On the free tier Google may use prompts and replies (including CV text) to improve its products; see <https://ai.google.dev/gemini-api/docs/pricing>. The site tells users this on the CV upload screen. Set `ALLOWED_ORIGINS` to your site's address so others cannot use your key from elsewhere.
 
 GitHub Pages can host the static files but cannot run `api/ai.js`, so AI features would be off there.
 
@@ -44,7 +44,7 @@ GitHub Pages can host the static files but cannot run `api/ai.js`, so AI feature
 ```bash
 # edit src/*.html, then
 node scripts/build.js
-npx vercel dev      # serves index.html and /api/ai locally (needs ANTHROPIC_API_KEY in .env)
+npx vercel dev      # serves index.html and /api/ai locally (needs GEMINI_API_KEY in .env)
 ```
 
 ## Known limits

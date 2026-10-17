@@ -26,6 +26,7 @@
       if (e && e.name === "AbortError") throw err("cancelled", "Cancelled");
       throw err("upstream_error", "Network error");
     }
+    if (r.status === 429 && !opts._retried) { await new Promise(function (ok) { setTimeout(ok, 5000); }); return call(prompt, Object.assign({}, opts, { _retried: true })); }
     var j = null; try { j = await r.json(); } catch (e) {}
     if (!r.ok) {
       var code = r.status === 429 ? "rate_limited" : r.status === 503 ? "unavailable" : "upstream_error";
