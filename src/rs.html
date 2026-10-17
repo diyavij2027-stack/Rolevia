@@ -60,7 +60,36 @@ function packFor(company,role){const p=findPack(company);if(!p)return null;const
  return{pack:p,items,match,srcOf,otherRoles,evidence:hasDirect&&p.strength!=="limited"?"moderate":hasDirect?"limited":"adjacent only"}}
 /* AI research brief for companies or roles the packs do not cover; clearly labelled as general knowledge */
 const RS_KEY=(c,r,d)=>normName(c)+"|"+normName(r)+"|"+normName(d);
+
+/* ----- current web research on any company (Google Search grounding through /api/research). Site only. ----- */
+const WEB_ON=()=>!!window.ROLEVIA_SITE&&typeof SITE!=="undefined"&&SITE.on&&typeof ROLEVIA_AUTH!=="undefined";
+async function webLookup(company,role,domain,force){S.lookups=S.lookups||{};const key=normName(company);const c=S.lookups[key];
+ if(!force&&c&&Date.now()-c.at<7*864e5&&c.role===role)return c;
+ const token=await ROLEVIA_AUTH.token();
+ const r=await fetch("/api/research",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+token},body:JSON.stringify({company,role,domain})});
+ const j=await r.json().catch(()=>({}));
+ if(!r.ok)throw{code:j.code||"unavailable",message:j.error||"Research is unavailable right now."};
+ const out={...j,at:Date.now(),role,query:company};S.lookups[key]=out;save();return out}
+function briefFromLookup(lk){const known=x=>({point:x,confidence:"known"});
+ return{roleReality:[lk.summary,lk.businessModel?"How it makes money: "+lk.businessModel:""].filter(Boolean).join(" "),competencies:lk.roleRequirements||[],
+  domainTopics:[...(lk.products||[]).map(x=>"Product or service: "+x),...(lk.likelyCaseAreas||[])].slice(0,10),
+  companyAngles:[lk.businessModel?known("Business model: "+lk.businessModel):null,...(lk.products||[]).map(x=>known("Offers: "+x)),...(lk.culture||[]).map(x=>known("Stated culture: "+x)),...(lk.recentDevelopments||[]).map(x=>known("Recent"+(x.date?" ("+x.date+")":"")+": "+x.item))].filter(Boolean),
+  stylesOfQuestioning:lk.interviewSignals||[],caution:lk.limits||"",grounded:true,sources:lk.sources||[],retrieved:lk.retrieved,officialName:lk.officialName,at:Date.now()}}
+function lookupPanel(){const co=(SU.v.company||"").trim();if(!WEB_ON()||co.length<2)return"";
+ const lk=(S.lookups||{})[normName(co)],L_=SU.look&&SU.look.company===normName(co)?SU.look:null;
+ const btn=`<button class="btn ghost sm" data-act="colookup" ${L_&&L_.status==="busy"?"disabled":""}>${L_&&L_.status==="busy"?"Researching…":lk?"Refresh research":"Research this company"}</button>`;
+ let body="";
+ if(L_&&L_.status==="busy")body=`<p class="small muted" role="status">Searching the web for ${esc(co)}. This takes 10 to 20 seconds.</p>`;
+ else if(L_&&L_.status==="err")body=`<div class="note bad small" role="alert">${esc(L_.err)}</div>`;
+ else if(lk&&lk.found){const li=a=>(a||[]).length?`<ul class="small" style="margin:4px 0 0;padding-left:18px">${a.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:"";
+  body=`<div class="small stack"><div><b>${esc(lk.officialName||co)}</b>: ${esc(lk.summary||"")}</div>${lk.businessModel?`<div><b>Business model.</b> ${esc(lk.businessModel)}</div>`:""}${(lk.products||[]).length?`<div><b>Products and services.</b>${li(lk.products)}</div>`:""}${(lk.culture||[]).length?`<div><b>Culture the company states.</b>${li(lk.culture)}</div>`:""}${(lk.recentDevelopments||[]).length?`<div><b>Recent developments.</b>${li(lk.recentDevelopments.map(x=>(x.date?x.date+": ":"")+x.item))}</div>`:""}${(lk.roleRequirements||[]).length?`<div><b>What the role asks for.</b>${li(lk.roleRequirements)}</div>`:""}
+  <div><b>Sources</b> (retrieved ${esc(lk.retrieved||"")}): ${(lk.sources||[]).map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.title)}</a>`).join(" · ")}</div>${lk.limits?`<div class="muted">Limits: ${esc(lk.limits)}</div>`:""}<div class="muted">Summarised by AI from the web pages above. Check the links before relying on any fact. Questions use these facts for company context only; none is presented as a real interview question.</div></div>`}
+ else if(lk&&!lk.found)body=`<div class="note small">We could not verify a company called “${esc(co)}” from public web sources. The interview will use <b>industry-based practice questions</b> for your domain and role plus your CV, and no company facts are assumed.</div>`;
+ return`<div class="card stack" style="margin-top:12px"><div class="row between"><b>Company research</b>${btn}</div>${body||`<p class="small muted">Optional. Searches the web for this company’s business, products, culture, recent news and what the role needs, then uses it to tailor questions. Results appear here with links.</p>`}</div>`}
+ACT.colookup=async()=>{const co=(SU.v.company||"").trim();if(co.length<2)return;const k=normName(co);SU.look={company:k,status:"busy"};drawSetup();
+ try{await webLookup(co,SU.v.role,SU.v.domain,true);SU.look=null}catch(e){SU.look={company:k,status:"err",err:(e&&e.message)||"Research is unavailable right now."}}drawSetup()};
 async function researchBrief(sel,pf){S.research=S.research||{};const key=RS_KEY(sel.company,sel.role,sel.domain);const c=S.research[key];if(c&&Date.now()-c.at<30*864e5)return c;
+ if(WEB_ON()&&sel.company){try{const lk=await webLookup(sel.company,sel.role,sel.domain);if(lk&&lk.found){const b=briefFromLookup(lk);S.research[key]=b;save();return b}}catch(e){}}
  const known=pf?JSON.stringify({process:pf.items.process.map(x=>x.text),patterns:pf.items.patterns.map(x=>x.text)}).slice(0,2500):"none";
  const r=await ai(`You are preparing a recruiter-style briefing for a mock interview. Company: ${sel.company||"(not specified)"}. Domain/industry: ${sel.domain}. Role: ${sel.role}. Level: ${sel.level}. Round: ${sel.round}.
 Publicly sourced notes already collected (verified by a person, anecdotal): ${known}.
