@@ -746,7 +746,7 @@ function cvUploadBlock(){const c=S.cv;return`<div class="card stack" style="back
  <label class="drop" for="cf" id="drop"><input id="cf" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" data-act="cvfile" style="position:absolute;opacity:0;inset:0;cursor:pointer;width:100%;height:100%"><span><b>${c?"Replace file":"Choose a file"}</b> or drop it here</span></label>
  <div id="cvname" class="small">${c?`Current: <b>${esc(c.fileName)}</b> · ${(c.size/1024).toFixed(0)} KB`:"No file chosen yet"}</div><div id="cvstat"></div><div class="row"><button class="btn ghost sm" id="cvretry" data-act="cvretry" hidden>Retry</button></div></div>`}
 function drawSetup(){const el=$("#su");if(!el)return;const set=PENDING_SET;let body="";
- if(SU.step===1){const pf=suV("company")?findPack(suV("company")):null;
+ if(SU.step===1){const pf=suV("company")?packFor(suV("company"),suV("role")):null;
   body=`${set?`<div class="note info" style="margin-bottom:12px">Using your “${esc(set.name)}” set (${set.items.length} questions) as extra material.</div>`:""}<div class="grid g2"><div class="field"><label for="ic">Target company</label><input id="ic" name="company" value="${esc(suV("company"))}" list="cl2" placeholder="e.g. Puma" autocomplete="off"><datalist id="cl2">${POP.map(p=>`<option value="${esc(p[0])}">`).join("")}${S.profile.targets.map(t=>`<option value="${esc(t)}">`).join("")}</datalist></div>
   <div class="field"><label for="idm">Domain / industry</label><select id="idm" name="domain"><option value="">Select…</option>${INDUSTRIES.map(r=>`<option ${r===suV("domain")?"selected":""}>${r}</option>`).join("")}</select></div>
   <div class="field"><label for="ir">Job role</label><select id="ir" name="role">${ROLES.map(r=>`<option ${r===suV("role")?"selected":""}>${r}</option>`).join("")}</select></div>
@@ -1446,7 +1446,8 @@ if(SITE.on){
       const vj=await v.json().catch(()=>({}));
       if(!v.ok)throw new Error(vj.error||"Verification failed");
       await SITE.refresh();pstat("ok",`<b>Payment confirmed.</b> ${esc(pl.name)} is now on your account. You have ${SITE.summary.interviews} interview${SITE.summary.interviews==1?"":"s"} and ${SITE.summary.gd} group GD${SITE.summary.gd==1?"":"s"} available. ${A("/interviews/new","Start an interview")} · ${A("/gd/group","Book a GD")}`)}
-     catch(err){pstat("err",`We received your payment (ID ${esc(resp.razorpay_payment_id||"")}) but could not confirm it just now (${esc(err.message)}). Your sessions are added automatically within a minute once the bank confirms. Refresh this page to check.`);
+     catch(err){if(/signature|did not match|invalid/i.test(String(err.message))){pstat("err",`We could not verify this payment (${esc(err.message)}). Nothing was unlocked. If money left your account, it is matched automatically by our payment provider; quote payment ID ${esc(resp.razorpay_payment_id||"")} if you contact us.`);return done()}
+      pstat("err",`We received your payment (ID ${esc(resp.razorpay_payment_id||"")}) but could not confirm it just now (${esc(err.message)}). Your sessions are added automatically within a minute once the bank confirms. Refresh this page to check.`);
       for(let i=0;i<8;i++){await new Promise(r=>setTimeout(r,4000));await SITE.refresh();if(SITE.summary&&SITE.summary.gd+SITE.summary.interviews>before){pstat("ok","<b>Payment confirmed.</b> Your sessions have been added.");break}}}
      done()}});
    box.on("payment.failed",x=>{pstat("err","Payment failed"+(x&&x.error&&x.error.description?": "+esc(x.error.description):"")+". You were not charged. Try again.");done()});

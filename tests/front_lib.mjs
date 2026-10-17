@@ -22,7 +22,7 @@ async function asUser(uid,sql,params){const c=await pool.connect();try{await c.q
 let orderN=0;export const orders=new Map();
 global.fetch=async(url,o={})=>{url=String(url);
  if(url.startsWith('https://sb.test/auth/v1/user')){const t=/Bearer (.+)/.exec(o.headers.Authorization)?.[1];const u=tokens.get(t);return u?jres(200,u):jres(401,{message:'bad jwt'})}
- if(url.startsWith('https://sb.test/rest/v1/rpc/')){const fn=url.split('/rpc/')[1];const args=JSON.parse(o.body||'{}');const keys=Object.keys(args);const c=await pool.connect();try{await c.query('set role service_role');const r=await c.query(`select ${fn}(${keys.map((k,i)=>`${k} => $${i+1}`).join(',')}) as r`,keys.map(k=>args[k]));return jres(200,r.rows[0].r)}catch(e){return jres(400,{message:e.message})}finally{await c.query('reset role').catch(()=>{});c.release()}}
+ if(url.startsWith('https://sb.test/rest/v1/rpc/')){const fn=url.split('/rpc/')[1];const args=JSON.parse(o.body||'{}');const keys=Object.keys(args);const c=await pool.connect();try{await c.query('set role service_role');const r=await c.query(`select * from ${fn}(${keys.map((k,i)=>`${k} => $${i+1}`).join(',')})`,keys.map(k=>args[k]));const scalar=r.fields.length===1&&r.fields[0].name===fn;return jres(200,scalar?(r.rows[0]?r.rows[0][fn]:null):r.rows)}catch(e){return jres(400,{message:e.message})}finally{await c.query('reset role').catch(()=>{});c.release()}}
  if(url.startsWith('https://sb.test/rest/v1/plans')){const id=/id=eq\.([^&]+)/.exec(url)[1];const r=await pool.query('select id,name,amount_paise,buyable from plans where id=$1',[decodeURIComponent(id)]);return jres(200,r.rows)}
  if(url.startsWith('https://api.razorpay.com/v1/orders')){const b=JSON.parse(o.body);const id='order_T'+(++orderN);orders.set(id,b);return jres(200,{id,amount:b.amount,currency:b.currency})}
  if(url.includes('generativelanguage.googleapis.com')){const b=JSON.parse(o.body);const prompt=b.contents[0].parts[0].text;geminiLog.push({prompt,tools:b.tools});const rep=geminiReply(prompt,b);
@@ -59,7 +59,7 @@ export function fakeSupabase(store){
     async getSession(){load();return{data:{session}}},
     onAuthStateChange(f){listeners.push(f);return{data:{subscription:{unsubscribe(){}}}}},
     async resetPasswordForEmail(){return{error:null}},async updateUser(){return{error:null}}},
-   async rpc(fn,args){if(!uid())return{data:null,error:{message:'not_signed_in'}};const keys=Object.keys(args||{});try{const r=await asUser(uid(),`select ${fn}(${keys.map((kk,i)=>`${kk} => $${i+1}`).join(',')}) as r`,keys.map(kk=>args[kk]));return{data:r.rows[0].r,error:null}}catch(e){return{data:null,error:err(e)}}},
+   async rpc(fn,args){if(!uid())return{data:null,error:{message:'not_signed_in'}};const keys=Object.keys(args||{});try{const r=await asUser(uid(),`select * from ${fn}(${keys.map((kk,i)=>`${kk} => $${i+1}`).join(',')})`,keys.map(kk=>args[kk]));const scalar=r.fields.length===1&&r.fields[0].name===fn;return{data:scalar?(r.rows[0]?r.rows[0][fn]:null):r.rows,error:null}}catch(e){return{data:null,error:err(e)}}},
    from(t){return{select:async()=>{try{const r=await asUser(uid(),`select * from ${t}`);return{data:r.rows,error:null}}catch(e){return{data:null,error:err(e)}}}}},
    channel(name,o){const key=o?.config?.presence?.key;const room=presence.get(name)||presence.set(name,new Map()).get(name);let cb=null;const self={on(t,f,g){cb=g;return self},subscribe(f){room.set(key,{state:null,cb:()=>cb&&cb()});setTimeout(()=>f('SUBSCRIBED'),1);return self},async track(st){room.get(key).state=st;room.forEach(m=>m.cb())},untrack(){room.delete(key);room.forEach(m=>m.cb())},presenceState(){const o={};room.forEach((m,kk)=>{if(m.state)o[kk]=[m.state]});return o}};return self},
    removeChannel(){}};
@@ -84,3 +84,4 @@ export async function boot({user=null,store=new Map(),confirm=false,extra}={}){
  w.Blob.prototype.arrayBuffer=function(){return new Promise(r=>{const fr=new w.FileReader();fr.onload=()=>r(fr.result);fr.readAsArrayBuffer(this)})};
  return{w,d:w.document,store}}
 export const page=(d)=>d.querySelector('main')?.textContent.replace(/\s+/g,' ')||d.body.textContent.replace(/\s+/g,' ');
+export async function userStore(email,name='U'){const id=await makeUser(email,'password123',name);const t='tok_'+id+'_pre';tokens.set(t,{id,email,user_metadata:{name}});const st=new Map();st.set('sb-test-auth-token',JSON.stringify({access_token:t,user:{id,email,user_metadata:{name}}}));return{id,store:st}}

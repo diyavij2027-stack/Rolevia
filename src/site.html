@@ -182,7 +182,8 @@ if(SITE.on){
       const vj=await v.json().catch(()=>({}));
       if(!v.ok)throw new Error(vj.error||"Verification failed");
       await SITE.refresh();pstat("ok",`<b>Payment confirmed.</b> ${esc(pl.name)} is now on your account. You have ${SITE.summary.interviews} interview${SITE.summary.interviews==1?"":"s"} and ${SITE.summary.gd} group GD${SITE.summary.gd==1?"":"s"} available. ${A("/interviews/new","Start an interview")} · ${A("/gd/group","Book a GD")}`)}
-     catch(err){pstat("err",`We received your payment (ID ${esc(resp.razorpay_payment_id||"")}) but could not confirm it just now (${esc(err.message)}). Your sessions are added automatically within a minute once the bank confirms. Refresh this page to check.`);
+     catch(err){if(/signature|did not match|invalid/i.test(String(err.message))){pstat("err",`We could not verify this payment (${esc(err.message)}). Nothing was unlocked. If money left your account, it is matched automatically by our payment provider; quote payment ID ${esc(resp.razorpay_payment_id||"")} if you contact us.`);return done()}
+      pstat("err",`We received your payment (ID ${esc(resp.razorpay_payment_id||"")}) but could not confirm it just now (${esc(err.message)}). Your sessions are added automatically within a minute once the bank confirms. Refresh this page to check.`);
       for(let i=0;i<8;i++){await new Promise(r=>setTimeout(r,4000));await SITE.refresh();if(SITE.summary&&SITE.summary.gd+SITE.summary.interviews>before){pstat("ok","<b>Payment confirmed.</b> Your sessions have been added.");break}}}
      done()}});
    box.on("payment.failed",x=>{pstat("err","Payment failed"+(x&&x.error&&x.error.description?": "+esc(x.error.description):"")+". You were not charged. Try again.");done()});
