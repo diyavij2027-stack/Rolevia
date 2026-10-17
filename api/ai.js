@@ -27,8 +27,18 @@ function allowedOrigin(req) {
 
 module.exports = async function handler(req, res) {
   res.setHeader("Cache-Control", "no-store");
-  const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-  if (req.method === "GET") return res.status(200).json({ ok: !!key });
+  const raw = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
+  const key = raw.trim().replace(/^["']|["']$/g, "").trim();   // tolerate stray spaces/quotes when pasting
+  if (req.method === "GET") {
+    // Diagnostics: never returns the key itself.
+    const named = Object.keys(process.env).filter(k => /gemini|google|api_?key/i.test(k) && k !== "GEMINI_API_KEY" && k !== "GOOGLE_API_KEY");
+    let hint = "";
+    if (!key) hint = named.length
+      ? "No GEMINI_API_KEY here, but similarly named variables exist: " + named.join(", ") + ". The name must be exactly GEMINI_API_KEY."
+      : "GEMINI_API_KEY is not set for this deployment (" + (process.env.VERCEL_ENV || "unknown env") + "). Add it in Settings > Environment Variables with this environment ticked, then redeploy.";
+    else if (!/^AIza/.test(key)) hint = "A key is set but it does not look like a Google AI Studio key (should start with AIza).";
+    return res.status(200).json({ ok: !!key, vercelEnv: process.env.VERCEL_ENV || null, deployment: process.env.VERCEL_URL || null, keyFormatLooksRight: key ? /^AIza[\w-]{30,}$/.test(key) : null, hint });
+  }
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   if (!key) return res.status(503).json({ error: "AI is not configured on this site." });
   if (!allowedOrigin(req)) return res.status(403).json({ error: "Origin not allowed." });
