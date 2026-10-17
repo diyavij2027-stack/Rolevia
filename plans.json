@@ -1,23 +1,112 @@
 [
-  { "id": "free", "name": "Free", "amountInr": 0, "price": "₹0", "usd": "$0", "per": "one-time", "buyable": false,
-    "grants": { "interview": 1, "gd": 1 }, "validDays": null,
-    "feats": ["1 free AI mock interview", "1 free live group GD", "Unlimited-style solo GD practice (fair-use daily cap)", "Basic company research", "Basic feedback"] },
-  { "id": "gd", "name": "Individual GD", "amountInr": 179, "price": "₹179", "usd": "≈ $2", "per": "/session", "buyable": true,
-    "grants": { "gd": 1 }, "validDays": null,
-    "feats": ["1 scheduled live GD session with real candidates", "Individual AI feedback"] },
-  { "id": "combo", "name": "1 GD + 1 Interview", "amountInr": 179, "price": "₹179", "usd": "≈ $2", "per": "/package", "buyable": true,
-    "grants": { "gd": 1, "interview": 1 }, "validDays": null,
-    "feats": ["1 live group GD session", "1 company-specific AI voice interview", "Strict, evidence-based reports for both"] },
-  { "id": "gd3", "name": "3 GD Session Pack", "amountInr": 537, "price": "₹537", "usd": "≈ $6", "per": "/pack of 3", "buyable": true,
-    "grants": { "gd": 3 }, "validDays": null,
-    "feats": ["3 scheduled live GD sessions (₹179 each, no discount applied)", "Individual AI feedback after every session", "Book any 3 slots, one per slot"] },
-  { "id": "pro", "name": "Placement Pro", "amountInr": 599, "price": "₹599", "usd": "≈ $7", "per": "/30 days", "buyable": true,
-    "grants": { "interview": 60, "gd": 8 }, "validDays": 30,
-    "feats": ["60 AI mock interviews (30 days)", "8 live GD sessions (30 days)", "Advanced role-specific preparation", "Detailed analytics and personalised preparation", "Priority GD booking"] },
-  { "id": "premium", "name": "Premium", "amountInr": 799, "price": "₹799", "usd": "≈ $9", "per": "/30 days", "buyable": true,
-    "grants": { "interview": 30, "gd": 4 }, "validDays": 30,
-    "feats": ["30 AI mock interviews (30 days)", "4 live GD sessions (30 days)", "Detailed company-specific preparation", "CV-based questions and feedback", "Progress tracking and preparation plans"] },
-  { "id": "college", "name": "College Plan", "amountInr": 1799, "price": "From ₹1,799", "usd": "From ≈ $20", "per": "/student/year", "buyable": false,
-    "grants": {}, "validDays": null,
-    "feats": ["Student interview and GD preparation", "Placement-cell dashboard", "Aggregate, privacy-conscious insights"] }
+  {
+    "id": "free",
+    "name": "Free",
+    "amountInr": 0,
+    "price": "$0",
+    "per": "one-time",
+    "buyable": false,
+    "grants": {
+      "interview": 1,
+      "gd": 1
+    },
+    "validDays": null,
+    "feats": [
+      "1 free AI mock interview",
+      "1 free live group GD",
+      "Unlimited-style solo GD practice (fair-use daily cap)",
+      "Basic company research",
+      "Basic feedback"
+    ]
+  },
+  {
+    "id": "combo",
+    "name": "1 GD + 1 Interview",
+    "amountInr": 179,
+    "price": "$2",
+    "per": "/package",
+    "buyable": true,
+    "grants": {
+      "gd": 1,
+      "interview": 1
+    },
+    "validDays": null,
+    "feats": [
+      "1 live group GD session",
+      "1 company-specific AI voice interview",
+      "Strict, evidence-based reports for both"
+    ]
+  },
+  {
+    "id": "gd3",
+    "name": "3 GD Session Pack",
+    "amountInr": 537,
+    "price": "$6",
+    "per": "/pack of 3",
+    "buyable": true,
+    "grants": {
+      "gd": 3
+    },
+    "validDays": null,
+    "feats": [
+      "3 scheduled live GD sessions ($2 each, no discount applied)",
+      "Individual AI feedback after every session",
+      "Book any 3 slots, one per slot"
+    ]
+  },
+  {
+    "id": "pro",
+    "name": "Placement Pro",
+    "amountInr": 599,
+    "price": "$7",
+    "per": "/30 days",
+    "buyable": true,
+    "grants": {
+      "interview": 60,
+      "gd": 8
+    },
+    "validDays": 30,
+    "feats": [
+      "60 AI mock interviews (30 days)",
+      "8 live GD sessions (30 days)",
+      "Advanced role-specific preparation",
+      "Detailed analytics and personalised preparation",
+      "Priority GD booking"
+    ]
+  },
+  {
+    "id": "premium",
+    "name": "Premium",
+    "amountInr": 799,
+    "price": "$9",
+    "per": "/30 days",
+    "buyable": true,
+    "grants": {
+      "interview": 30,
+      "gd": 4
+    },
+    "validDays": 30,
+    "feats": [
+      "30 AI mock interviews (30 days)",
+      "4 live GD sessions (30 days)",
+      "Detailed company-specific preparation",
+      "CV-based questions and feedback",
+      "Progress tracking and preparation plans"
+    ]
+  },
+  {
+    "id": "college",
+    "name": "College Plan",
+    "amountInr": 1799,
+    "price": "From $20",
+    "per": "/student/year",
+    "buyable": false,
+    "grants": {},
+    "validDays": null,
+    "feats": [
+      "Student interview and GD preparation",
+      "Placement-cell dashboard",
+      "Aggregate, privacy-conscious insights"
+    ]
+  }
 ]

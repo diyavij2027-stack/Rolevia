@@ -8,6 +8,8 @@ const sql = `-- Generated from plans.json by scripts/gen-plans.js. Run after sch
 insert into plans (id, name, amount_paise, grants, valid_days, buyable) values
 ${rows.join(",\n")}
 on conflict (id) do update set name = excluded.name, amount_paise = excluded.amount_paise, grants = excluded.grants, valid_days = excluded.valid_days, buyable = excluded.buyable;
+-- plans removed from plans.json can no longer be bought (kept so past purchases still resolve)
+update plans set buyable = false where id not in (${plans.map(p => q(p.id)).join(", ")});
 `;
 fs.writeFileSync(path.join(root, "supabase", "plans_seed.sql"), sql);
 console.log("plans_seed.sql written for", plans.length, "plans");

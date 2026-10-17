@@ -35,3 +35,4 @@ ${body}
 `;
 fs.writeFileSync(path.join(root, "index.html"), html);
 console.log("index.html written,", (html.length / 1024).toFixed(0), "KB,", scripts.length, "inline scripts OK");
+require("./gen-plans.js");
