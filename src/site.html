@@ -15,7 +15,7 @@ const SITE=(function(){
  /* ----- messages ----- */
  T.msg=e=>{const m=String((e&&(e.message||e.code))||e||"");
   if(/no_credits/.test(m))return"You have no sessions left for this. Get more on the Pricing page.";
-  if(/daily_limit/.test(m))return"You have reached today's limit of 5 solo GD practices. Try again tomorrow.";
+  if(/daily_limit/.test(m))return"You have reached today's limit of 5 GD practices. Try again tomorrow.";
   if(/not_signed_in|JWT|expired/i.test(m))return"Please sign in again.";
   if(/already_booked/.test(m))return"You already have a seat in this session.";
   if(/conflict/.test(m))return"You already have a session at an overlapping time.";
@@ -54,10 +54,10 @@ const SITE=(function(){
  T.startSession=async(kind,meta)=>{const {data,error}=await sb.rpc("start_session",{p_kind:kind,p_meta:meta||{}});if(error)throw error;T.refresh();return data};
  T.closeSession=async(id,status)=>{try{await sb.rpc("close_session",{p_id:id,p_status:status})}catch(e){}T.refresh().then(()=>{if(/^#\/(dashboard|pricing)/.test(location.hash))render()})};
  T.dashCard=()=>{const s=T.summary;
-  const body=s?`<div class="grid g2"><div><div class="score">${s.interviews}</div><div class="small muted">AI interview${s.interviews==1?"":"s"} left</div></div><div><div class="score">${s.gd}</div><div class="small muted">group GD${s.gd==1?"":"s"} left</div></div></div>
+  const body=s?`<div class="grid g2"><div><div class="score">${s.interviews}</div><div class="small muted">AI interview${s.interviews==1?"":"s"} left</div></div><div><div class="score">${s.gd}</div><div class="small muted">GD practice${s.gd==1?"":"s"} left</div></div></div>
    ${(s.grants||[]).filter(g=>g.expires).slice(0,2).map(g=>`<div class="small muted">${g.remaining} ${g.kind==="gd"?"GD":"interview"}${g.remaining==1?"":"s"} expire${g.remaining==1?"s":""} ${fmtDate(g.expires)}</div>`).join("")}
    <div class="small muted">${s.completedInterviews} interview${s.completedInterviews==1?"":"s"} completed · ${S.reports.length} report${S.reports.length==1?"":"s"} saved in this browser</div>
-   ${s.interviews<1||s.gd<1?`<div class="note small">${s.interviews<1&&s.gd<1?"You are out of sessions.":s.interviews<1?"You are out of interviews.":"You are out of group GDs."} ${A("/pricing","See packages")}</div>`:""}`
+   ${s.interviews<1||s.gd<1?`<div class="note small">${s.interviews<1&&s.gd<1?"You are out of sessions.":s.interviews<1?"You are out of interviews.":"You are out of GD practices."} ${A("/pricing","See packages")}</div>`:""}`
    :T.summaryErr?`<div class="note bad small" role="alert">${esc(T.summaryErr)} <button class="btn ghost sm" data-act="sitereload">Retry</button></div>`:loading("Loading your sessions…");
   return`<div class="card stack"><div class="row between"><h3>Your sessions</h3>${A("/pricing","Get more","small")}</div>${body}</div>`};
  ACT.sitereload=async()=>{T.summaryErr=null;await T.refresh();render()};
@@ -134,7 +134,9 @@ if(SITE.on){
   try{const r=await SITE.startSession("gd_solo",{topic:(SOLO.topic||"").slice(0,200)});SOLO.sid=r.id}catch(err){SOLO.err=SITE.msg(err);return drawSolo()}
   _soloprep(t,e)};
  const _soloScore=soloScore;
- soloScore=async function(rep){const sid=SOLO.sid;if(sid)AI_CTX.id=sid;try{return await _soloScore(rep)}finally{if(sid){SOLO.sid=null;AI_CTX.id=null;SITE.closeSession(sid,"completed")}}};
+ soloScore=async function(rep){const sid=SOLO.sid;if(sid)AI_CTX.id=sid;try{return await _soloScore(rep)}finally{if(sid){SOLO.sid=null;AI_CTX.id=null;SITE.closeSession(sid,rep.limited?"abandoned":"completed")}}};
+ const _solofinish=ACT.solofinish;
+ ACT.solofinish=async(t,e)=>{const r=await _solofinish(t,e);if(SOLO.sid&&SOLO.stage==="result"){const sid=SOLO.sid;SOLO.sid=null;AI_CTX.id=null;SITE.closeSession(sid,"abandoned")}return r};
  const _soloReset=soloReset;
  soloReset=function(){if(SOLO.sid&&SOLO.stage!=="result"){const sid=SOLO.sid;SOLO.sid=null;SITE.closeSession(sid,"abandoned")}_soloReset()};
 

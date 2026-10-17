@@ -13,10 +13,9 @@
     "validDays": null,
     "feats": [
       "1 free AI mock interview",
-      "1 free live group GD",
-      "Unlimited-style solo GD practice (fair-use daily cap)",
-      "Basic company research",
-      "Basic feedback"
+      "1 free AI-scored GD practice",
+      "Company research on any company",
+      "Strict, evidence-based feedback"
     ]
   },
   {
@@ -32,7 +31,7 @@
     },
     "validDays": null,
     "feats": [
-      "1 live group GD session",
+      "1 AI-scored GD practice",
       "1 company-specific AI voice interview",
       "Strict, evidence-based reports for both"
     ]
@@ -49,9 +48,9 @@
     },
     "validDays": null,
     "feats": [
-      "3 scheduled live GD sessions ($2 each, no discount applied)",
-      "Individual AI feedback after every session",
-      "Book any 3 slots, one per slot"
+      "3 AI-scored GD practice sessions ($2 each, no discount applied)",
+      "Strict, evidence-based feedback after every session",
+      "Topics from categories or any company you name"
     ]
   },
   {
@@ -68,10 +67,9 @@
     "validDays": 30,
     "feats": [
       "60 AI mock interviews (30 days)",
-      "8 live GD sessions (30 days)",
+      "8 GD practice sessions (30 days)",
       "Advanced role-specific preparation",
-      "Detailed analytics and personalised preparation",
-      "Priority GD booking"
+      "Detailed analytics and personalised preparation"
     ]
   },
   {
@@ -88,7 +86,7 @@
     "validDays": 30,
     "feats": [
       "30 AI mock interviews (30 days)",
-      "4 live GD sessions (30 days)",
+      "4 GD practice sessions (30 days)",
       "Detailed company-specific preparation",
       "CV-based questions and feedback",
       "Progress tracking and preparation plans"

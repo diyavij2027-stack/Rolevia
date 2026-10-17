@@ -166,6 +166,7 @@ begin
   else
     select count(*) into today from app_sessions where user_id = uid and kind = 'gd_solo' and created_at > now() - interval '24 hours';
     if today >= 5 then raise exception 'daily_limit'; end if;
+    use_id := _use_credit(uid, 'gd', 'solo');
   end if;
   insert into app_sessions(user_id, kind, meta, credit_use_id) values (uid, p_kind, coalesce(p_meta, '{}'), use_id) returning id into sid;
   if use_id is not null then update credit_uses set ref = sid::text where id = use_id; end if;
@@ -183,7 +184,7 @@ begin
   if not found then raise exception 'not_found'; end if;
   if s.status <> 'open' then return jsonb_build_object('status', s.status, 'refunded', false); end if;
   -- an interview abandoned before the interviewer really started (setup/greeting only) does not use up the credit
-  if p_status = 'abandoned' and s.kind = 'interview' and s.ai_calls <= 3 and s.credit_use_id is not null then
+  if p_status = 'abandoned' and s.credit_use_id is not null and ((s.kind = 'interview' and s.ai_calls <= 3) or (s.kind = 'gd_solo' and s.ai_calls <= 1)) then
     refunded := _refund_credit(s.credit_use_id);
   end if;
   update app_sessions set status = p_status, closed_at = now() where id = p_id;

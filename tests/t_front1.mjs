@@ -30,7 +30,7 @@ ok(w2.location.hash==='#/onboarding','login works (first visit goes to onboardin
 // refresh persistence: boot again with same store
 const re=await L.boot({store});await sleep(300);re.w.location.hash='#/dashboard';await sleep(500);
 ok(re.w.location.hash==='#/dashboard'&&/Your sessions/.test(L.page(re.d))&&/AI interview/.test(L.page(re.d)),'after reload the session persists and dashboard shows remaining sessions');
-ok(/1\s*AI interview left/.test(L.page(re.d))&&/1\s*group GD left/.test(L.page(re.d)),'dashboard shows 1 interview and 1 GD left');
+ok(/1\s*AI interview left/.test(L.page(re.d))&&/1\s*GD practice left/.test(L.page(re.d)),'dashboard shows 1 interview and 1 GD left');
 // logout
 re.d.querySelector('[data-act=logout]').click();await sleep(400);ok(re.w.location.hash==='#/'&&!re.w.eval('S.user'),'logout clears session');
 re.w.location.hash='#/dashboard';await sleep(300);ok(re.w.location.hash==='#/login','private pages blocked after logout');

@@ -1,6 +1,6 @@
 # ROLEVIA
 
-Voice-based interview practice (company- and CV-specific, plus a separate situational and case round), group-discussion practice with live 6-person slots, strict evidence-based reports, and Razorpay payments.
+Voice-based interview practice (company- and CV-specific, plus a separate situational and case round), AI-scored group-discussion practice, strict evidence-based reports, and Razorpay payments.
 
 Static front end (`index.html`, built from `src/*.html`) + Vercel serverless functions (`api/`) + Supabase (auth, credits, bookings) + Google Gemini (AI, grounded company research) + Razorpay (payments).
 
@@ -16,9 +16,9 @@ The service-role key is only used inside `api/` functions. The browser receives 
 
 ## What is enforced on the server
 
-- Free plan: **1 interview + 1 group GD** per account (granted by a database trigger on sign-up).
+- Free plan: **1 interview + 1 GD practice** per account (granted by a database trigger on sign-up).
 - Every AI call is tied to a signed-in user and, for interviews and solo GDs, to a started session; per-session and daily caps apply. Starting a session spends a credit in the same transaction; abandoned sessions with almost no AI use are refunded.
-- Group GD: **max 6 per slot**, one seat per user per slot, no seats within 30 minutes of another booking, slots aligned to 30 minutes and up to 8 days ahead, booking spends a GD credit, cancelling at least 1 hour before the start refunds it. All inside one transaction with a per-slot lock (tested with 28 parallel requests: exactly 6 seats).
+- Group GD slot booking has been removed from the UI. The booking functions remain in the database but nothing in the app calls them.
 - Payments: the amount is read from the `plans` table on the server, never from the browser. Signatures are verified (HMAC-SHA256) for the checkout callback and the webhook; granting is idempotent.
 
 ## Pricing (single source: `plans.json`)
@@ -33,7 +33,7 @@ npm i pg @electric-sql/pglite jsdom   # test-only, not needed to deploy
 node tests/db-logic.pglite.test.mjs
 node tests/db-concurrency.postgres.test.mjs   # needs a local Postgres
 node tests/api.postgres.test.mjs
-node tests/t_front1.mjs ... t_nocv.mjs        # jsdom front-end tests against a real Postgres
+node tests/t_front1.mjs ... t_nocv.mjs        # jsdom front-end tests against a real Postgres (paths inside are environment-specific)
 ```
 
 ## Known limits
