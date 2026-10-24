@@ -44,6 +44,7 @@ ok(/payment confirmed/i.test(a.d.querySelector('#paystat').textContent),'return 
 ok(!/paid=1/.test(a.w.location.href),'checkout query string cleaned from the URL');
 o=await buy('gd3');await hook('payment.succeeded',o.metadata.order_ref,'pay_f2');const a3=await st();ok(a3.g===after.g+3&&a3.i===after.i,'3-GD pack grants 3 GDs only');
 o=await buy('pro');await hook('payment.succeeded',o.metadata.order_ref,'pay_f3');const a4=await st();ok(a4.i===a3.i+60&&a4.g===a3.g+8,'Placement Pro grants 60 interviews + 8 GDs');
+o=await buy('premium');L.payMeta.set('pay_f5',o.metadata.order_ref);{const body=JSON.stringify({type:'payment.succeeded',data:{payment_id:'pay_f5'}});const w5=await L.callApi('pay/webhook.js',{raw:body,headers:L.dodoSign(body)});ok(w5.code===200&&w5.body.granted===true,'webhook without metadata falls back to looking the payment up')}
 const bad=await hook('payment.succeeded',o.metadata.order_ref,'pay_f4',{ts:1});ok(bad.code===400,'stale webhook rejected');
 // credits now allow a second interview
 console.log('DBG',a.w.eval('JSON.stringify({u:!!S.user,h:location.hash,p:typeof PENDING_SET})'));a.w.location.hash='#/interviews/new';await sleep(300);await toStep3(a.w,a.d,'Puma');a.w.eval('SU.mic=true;SU.spk=true');const sb3=a.d.querySelector('[data-act=sustart]');click(a.w,sb3);await sleep(1500);

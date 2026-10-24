@@ -19,11 +19,12 @@ export const jres=(status,body)=>({ok:status<400,status,headers:{get:()=>null},j
 export const geminiLog=[];export let geminiReply=(p)=>({ok:1});
 export function setGemini(f){geminiReply=f}
 async function asUser(uid,sql,params){const c=await pool.connect();try{await c.query(`select set_config('request.jwt.claim.sub',$1,false)`,[uid||'']);await c.query('set role authenticated');return await c.query(sql,params)}finally{await c.query('reset role').catch(()=>{});c.release()}}
-let orderN=0;export const orders=new Map();
+export const payMeta=new Map();let orderN=0;export const orders=new Map();
 global.fetch=async(url,o={})=>{url=String(url);
  if(url.startsWith('https://sb.test/auth/v1/user')){const t=/Bearer (.+)/.exec(o.headers.Authorization)?.[1];const u=tokens.get(t);return u?jres(200,u):jres(401,{message:'bad jwt'})}
  if(url.startsWith('https://sb.test/rest/v1/rpc/')){const fn=url.split('/rpc/')[1];const args=JSON.parse(o.body||'{}');const keys=Object.keys(args);const c=await pool.connect();try{await c.query('set role service_role');const r=await c.query(`select * from ${fn}(${keys.map((k,i)=>`${k} => $${i+1}`).join(',')})`,keys.map(k=>args[k]));const scalar=r.fields.length===1&&r.fields[0].name===fn;return jres(200,scalar?(r.rows[0]?r.rows[0][fn]:null):r.rows)}catch(e){return jres(400,{message:e.message})}finally{await c.query('reset role').catch(()=>{});c.release()}}
  if(url.startsWith('https://sb.test/rest/v1/plans')){const id=/id=eq\.([^&]+)/.exec(url)[1];const r=await pool.query('select id,name,amount_paise,buyable from plans where id=$1',[decodeURIComponent(id)]);return jres(200,r.rows)}
+ if(url.startsWith('https://test.dodopayments.com/payments/')){const pid=url.split('/payments/')[1];return jres(200,{payment_id:pid,metadata:{order_ref:payMeta.get(pid)}})}
  if(url.startsWith('https://test.dodopayments.com/checkouts')){const b=JSON.parse(o.body);const id='cks_T'+(++orderN);b.auth=o.headers.Authorization;orders.set(id,b);return jres(200,{session_id:id,checkout_url:'https://checkout.dodo.test/'+id})}
  if(url.includes('generativelanguage.googleapis.com')){const b=JSON.parse(o.body);const prompt=b.contents[0].parts[0].text;geminiLog.push({prompt,tools:b.tools});const rep=geminiReply(prompt,b);
   const cand={content:{parts:[{text:typeof rep==='string'?rep:JSON.stringify(rep.text!==undefined?rep.text:rep)}]},finishReason:'STOP'};if(rep&&rep.__grounding)cand.groundingMetadata=rep.__grounding;
