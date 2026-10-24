@@ -4,7 +4,7 @@ const reqS=createRequire(import.meta.url);const API='/home/claude/rolevia-repo/a
 const R='/home/claude/rolevia-repo/';
 export const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const cfg={host:'/tmp/pgdata',port:54329,user:'pgtest',database:'postgres'};
-export const ENV={SUPABASE_URL:'https://sb.test',SUPABASE_ANON_KEY:'anon',SUPABASE_SERVICE_ROLE_KEY:'svc',GEMINI_API_KEY:'AIza'+'x'.repeat(35),RAZORPAY_KEY_ID:'rzp_test_1',RAZORPAY_KEY_SECRET:'sec123',RAZORPAY_WEBHOOK_SECRET:'whsec'};
+export const ENV={SUPABASE_URL:'https://sb.test',SUPABASE_ANON_KEY:'anon',SUPABASE_SERVICE_ROLE_KEY:'svc',GEMINI_API_KEY:'AIza'+'x'.repeat(35),DODO_PAYMENTS_API_KEY:'dodo_key',DODO_PAYMENTS_WEBHOOK_KEY:'whsec_'+Buffer.from('webhook-secret-bytes').toString('base64'),DODO_MODE:'test',SITE_URL:'https://site.test',DODO_PRODUCT_COMBO:'pdt_combo',DODO_PRODUCT_GD3:'pdt_gd3',DODO_PRODUCT_PRO:'pdt_pro',DODO_PRODUCT_PREMIUM:'pdt_premium'};
 export let pool;
 export async function setupDb(name='rt3'){const a=new pg.Client(cfg);await a.connect();await a.query(`drop database if exists ${name}`);await a.query(`create database ${name}`);await a.end();
  pool=new pg.Pool({...cfg,database:name,max:10});
@@ -24,13 +24,15 @@ global.fetch=async(url,o={})=>{url=String(url);
  if(url.startsWith('https://sb.test/auth/v1/user')){const t=/Bearer (.+)/.exec(o.headers.Authorization)?.[1];const u=tokens.get(t);return u?jres(200,u):jres(401,{message:'bad jwt'})}
  if(url.startsWith('https://sb.test/rest/v1/rpc/')){const fn=url.split('/rpc/')[1];const args=JSON.parse(o.body||'{}');const keys=Object.keys(args);const c=await pool.connect();try{await c.query('set role service_role');const r=await c.query(`select * from ${fn}(${keys.map((k,i)=>`${k} => $${i+1}`).join(',')})`,keys.map(k=>args[k]));const scalar=r.fields.length===1&&r.fields[0].name===fn;return jres(200,scalar?(r.rows[0]?r.rows[0][fn]:null):r.rows)}catch(e){return jres(400,{message:e.message})}finally{await c.query('reset role').catch(()=>{});c.release()}}
  if(url.startsWith('https://sb.test/rest/v1/plans')){const id=/id=eq\.([^&]+)/.exec(url)[1];const r=await pool.query('select id,name,amount_paise,buyable from plans where id=$1',[decodeURIComponent(id)]);return jres(200,r.rows)}
- if(url.startsWith('https://api.razorpay.com/v1/orders')){const b=JSON.parse(o.body);const id='order_T'+(++orderN);orders.set(id,b);return jres(200,{id,amount:b.amount,currency:b.currency})}
+ if(url.startsWith('https://test.dodopayments.com/checkouts')){const b=JSON.parse(o.body);const id='cks_T'+(++orderN);b.auth=o.headers.Authorization;orders.set(id,b);return jres(200,{session_id:id,checkout_url:'https://checkout.dodo.test/'+id})}
  if(url.includes('generativelanguage.googleapis.com')){const b=JSON.parse(o.body);const prompt=b.contents[0].parts[0].text;geminiLog.push({prompt,tools:b.tools});const rep=geminiReply(prompt,b);
   const cand={content:{parts:[{text:typeof rep==='string'?rep:JSON.stringify(rep.text!==undefined?rep.text:rep)}]},finishReason:'STOP'};if(rep&&rep.__grounding)cand.groundingMetadata=rep.__grounding;
   return jres(200,{candidates:[cand]})}
  if(url.startsWith('https://redir.test/'))return{ok:false,status:302,headers:{get:h=>h==='location'?'https://www.example.com/page':null}};
  throw new Error('unmocked '+url)};
 const handlers={};const load=m=>handlers[m]||(handlers[m]=reqS(API+m));
+import cryptoW from 'crypto';
+export function dodoSign(body,{id='msg_1',ts=Math.floor(Date.now()/1000)}={}){const key=Buffer.from('webhook-secret-bytes');const sig=cryptoW.createHmac('sha256',key).update(id+'.'+ts+'.'+body).digest('base64');return{'webhook-id':id,'webhook-timestamp':String(ts),'webhook-signature':'v1,'+sig}}
 export async function callApi(mod,{method='POST',body,headers,raw}){const h=load(mod);const res={code:200,body:null,setHeader(){},status(c){res.code=c;return res},json(b){res.body=b;return res}};
  const {Readable}=await import('stream');let req;if(raw!==undefined){req=Readable.from([Buffer.from(raw)]);req.headers=headers||{};req.method=method;req.socket={}}else req={method,headers:headers||{},body,socket:{}};
  await h(req,res);return res}
@@ -71,7 +73,7 @@ export async function boot({user=null,store=new Map(),confirm=false,extra}={}){
  const dom=new JSDOM(html,{runScripts:'dangerously',url:'https://site.test/',pretendToBeVisual:true,
   beforeParse(w){w.scrollTo=()=>{};w.Element.prototype.scrollIntoView=()=>{};w.__errs=[];w.addEventListener('error',e=>w.__errs.push(e.message));
    Object.defineProperty(w,'localStorage',{value:ls,configurable:true});
-   w.ROLEVIA_CFG={backend:true,supabaseUrl:'https://sb.test',supabaseAnonKey:'anon',payments:true,razorpayKeyId:'rzp_test_1',ai:true};
+   w.ROLEVIA_CFG={backend:true,supabaseUrl:'https://sb.test',supabaseAnonKey:'anon',payments:true,ai:true};
    w.supabase=fakeSupabase(ls);
    w.__spoken=[];w.__recs=[];
    w.SpeechRecognition=function(){const r=this;r.start=()=>{w.__recs.push(r);r.live=true;setTimeout(()=>r.onstart&&r.onstart(),2)};r.abort=()=>{r.live=false;r.onend&&r.onend()};r.say=t=>r.onresult&&r.onresult({results:[[{transcript:t}]]})};

@@ -1,15 +1,15 @@
 # ROLEVIA
 
-Voice-based interview practice (company- and CV-specific, plus a separate situational and case round), AI-scored group-discussion practice, strict evidence-based reports, and Razorpay payments.
+Voice-based interview practice (company- and CV-specific, plus a separate situational and case round), AI-scored group-discussion practice, strict evidence-based reports, and Dodo Payments.
 
-Static front end (`index.html`, built from `src/*.html`) + Vercel serverless functions (`api/`) + Supabase (auth, credits, bookings) + Google Gemini (AI, grounded company research) + Razorpay (payments).
+Static front end (`index.html`, built from `src/*.html`) + Vercel serverless functions (`api/`) + Supabase (auth, credits, bookings) + Google Gemini (AI, grounded company research) + Dodo Payments (payments).
 
 ## Set-up (about 20 minutes)
 
 1. **Supabase**: create a project. In *SQL Editor* run `supabase/schema.sql`, then `supabase/plans_seed.sql` (this order, before any user signs up). In *Authentication > URL configuration* set *Site URL* to your Vercel URL and add `https://YOUR-SITE/**` to redirect URLs. For the quickest testing you can turn off *Confirm email*.
 2. **Vercel** > Project > Settings > Environment Variables (tick Production, Preview and Development), then **redeploy**:
-   `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and for payments `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`.
-3. **Razorpay** (test mode first): create a webhook to `https://YOUR-SITE/api/pay/webhook` for events `payment.captured` and `order.paid`, using the same secret as `RAZORPAY_WEBHOOK_SECRET`.
+   `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and for payments `DODO_PAYMENTS_API_KEY`, `DODO_PAYMENTS_WEBHOOK_KEY`, `DODO_MODE` (`test` or `live`), `SITE_URL`, and one `DODO_PRODUCT_<PLANID>` per paid plan (`COMBO`, `GD3`, `PRO`, `PREMIUM`).
+3. **Dodo Payments** (test mode first): create one product per paid plan at the dollar prices in `plans.json`, add a webhook to `https://YOUR-SITE/api/pay/webhook` for the `payment.succeeded` event, and put its signing secret in `DODO_PAYMENTS_WEBHOOK_KEY`.
 4. Open `https://YOUR-SITE/api/ai` : it should show `"ok": true`. If not, the JSON says which variable is missing.
 
 The service-role key is only used inside `api/` functions. The browser receives only the public anon key (via `/api/config`).

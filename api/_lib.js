@@ -6,12 +6,15 @@ const env = () => ({
   anon: process.env.SUPABASE_ANON_KEY || "",
   service: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
   geminiKey: (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "").trim().replace(/^["']|["']$/g, "").trim(),
-  rzpId: (process.env.RAZORPAY_KEY_ID || "").trim(),
-  rzpSecret: (process.env.RAZORPAY_KEY_SECRET || "").trim(),
-  rzpWebhook: (process.env.RAZORPAY_WEBHOOK_SECRET || "").trim()
+  dodoKey: (process.env.DODO_PAYMENTS_API_KEY || "").trim(),
+  dodoWebhook: (process.env.DODO_PAYMENTS_WEBHOOK_KEY || "").trim(),
+  dodoBase: (process.env.DODO_MODE || "test").trim().toLowerCase() === "live" ? "https://live.dodopayments.com" : "https://test.dodopayments.com",
+  siteUrl: (process.env.SITE_URL || "").trim().replace(/\/+$/, "")
 });
+// Each buyable plan needs a product created in the Dodo dashboard: DODO_PRODUCT_<PLANID> (e.g. DODO_PRODUCT_COMBO).
+const dodoProduct = id => (process.env["DODO_PRODUCT_" + String(id).toUpperCase().replace(/[^A-Z0-9]/g, "_")] || "").trim();
 const backendOn = () => { const e = env(); return !!(e.supabaseUrl && e.anon && e.service); };
-const paymentsOn = () => { const e = env(); return backendOn() && !!(e.rzpId && e.rzpSecret); };
+const paymentsOn = () => { const e = env(); return backendOn() && !!e.dodoKey; };
 
 async function readJson(req) {
   if (req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) return req.body;
@@ -50,6 +53,15 @@ async function rpc(fn, args) {
   } catch (err) { return { ok: false, error: "unreachable" }; }
 }
 
+// Standard Webhooks (used by Dodo): signature = base64(HMAC_SHA256(base64decode(secret), id.timestamp.body)), header "v1,<sig> v1,<sig2>".
+function verifyStandardWebhook(secret, headers, raw) {
+  const id = String(headers["webhook-id"] || ""), ts = String(headers["webhook-timestamp"] || ""), sigs = String(headers["webhook-signature"] || "");
+  if (!secret || !id || !ts || !sigs) return false;
+  if (!(Math.abs(Date.now() / 1000 - Number(ts)) <= 5 * 60)) return false;
+  const key = Buffer.from(secret.replace(/^whsec_/, ""), "base64");
+  const expected = crypto.createHmac("sha256", key).update(id + "." + ts + "." + raw.toString("utf8")).digest("base64");
+  return sigs.split(" ").some(p => { const [v, sig] = p.split(","); return v === "v1" && !!sig && safeEq(sig, expected); });
+}
 const hmac = (secret, data) => crypto.createHmac("sha256", secret).update(data).digest("hex");
 const safeEq = (a, b) => { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); };
 
@@ -67,4 +79,4 @@ function limited(key, max, windowMs) {
 }
 const clientIp = req => String((req.headers["x-forwarded-for"] || "").split(",")[0] || (req.socket && req.socket.remoteAddress) || "unknown").trim();
 
-module.exports = { env, backendOn, paymentsOn, readJson, readRaw, userFromRequest, rpc, hmac, safeEq, allowedOrigin, limited, clientIp };
+module.exports = { dodoProduct, verifyStandardWebhook, env, backendOn, paymentsOn, readJson, readRaw, userFromRequest, rpc, hmac, safeEq, allowedOrigin, limited, clientIp };

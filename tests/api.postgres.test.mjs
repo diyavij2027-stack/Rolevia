@@ -10,15 +10,15 @@ create or replace function auth.uid() returns uuid language sql stable as $$ sel
 grant usage on schema auth to authenticated; grant usage on schema public to authenticated, service_role;`);
 await pool.query(fs.readFileSync(R+'schema.sql','utf8'));await pool.query(fs.readFileSync(R+'plans_seed.sql','utf8'));
 // env
-Object.assign(process.env,{SUPABASE_URL:'https://sb.test',SUPABASE_ANON_KEY:'anon',SUPABASE_SERVICE_ROLE_KEY:'svc',GEMINI_API_KEY:'AIza'+'x'.repeat(35),RAZORPAY_KEY_ID:'rzp_test_1',RAZORPAY_KEY_SECRET:'sec123',RAZORPAY_WEBHOOK_SECRET:'whsec'});
-const tokens=new Map();let geminiCalls=[],rzpOrders=0,gemReply=null;
+Object.assign(process.env,{SUPABASE_URL:'https://sb.test',SUPABASE_ANON_KEY:'anon',SUPABASE_SERVICE_ROLE_KEY:'svc',GEMINI_API_KEY:'AIza'+'x'.repeat(35),DODO_PAYMENTS_API_KEY:'dodo_key',DODO_PAYMENTS_WEBHOOK_KEY:'whsec_'+Buffer.from('webhook-secret-bytes').toString('base64'),DODO_MODE:'test',SITE_URL:'https://site.test',DODO_PRODUCT_COMBO:'pdt_combo',DODO_PRODUCT_GD3:'pdt_gd3',DODO_PRODUCT_PRO:'pdt_pro',DODO_PRODUCT_PREMIUM:'pdt_premium'});
+const tokens=new Map();let dodoReqs=[],geminiCalls=[],rzpOrders=0,gemReply=null;
 const mkUser=async(email)=>{const id=(await pool.query('insert into auth.users(email) values ($1) returning id',[email])).rows[0].id;const t='tok_'+id;tokens.set(t,{id,email});return{id,token:t}};
 const jres=(status,body)=>({ok:status<400,status,headers:{get:()=>null},json:async()=>body,text:async()=>JSON.stringify(body)});
 global.fetch=async(url,o={})=>{url=String(url);
  if(url.startsWith('https://sb.test/auth/v1/user')){const t=/Bearer (.+)/.exec(o.headers.Authorization)?.[1];const u=tokens.get(t);return u?jres(200,u):jres(401,{message:'bad jwt'})}
  if(url.startsWith('https://sb.test/rest/v1/rpc/')){const fn=url.split('/rpc/')[1];const args=JSON.parse(o.body||'{}');const keys=Object.keys(args);const c=await pool.connect();try{await c.query('set role service_role');const q=`select ${fn}(${keys.map((k,i)=>`${k} => $${i+1}`).join(',')}) as r`;const r=await c.query(q,keys.map(k=>args[k]));return jres(200,r.rows[0].r)}catch(e){return jres(400,{message:e.message})}finally{await c.query('reset role').catch(()=>{});c.release()}}
  if(url.startsWith('https://sb.test/rest/v1/plans')){const id=/id=eq\.([^&]+)/.exec(url)[1];const r=await pool.query('select id,name,amount_paise,buyable from plans where id=$1',[decodeURIComponent(id)]);return jres(200,r.rows)}
- if(url.startsWith('https://api.razorpay.com/v1/orders')){rzpOrders++;const b=JSON.parse(o.body);return jres(200,{id:'order_T'+rzpOrders,amount:b.amount,currency:b.currency})}
+ if(url.startsWith('https://test.dodopayments.com/checkouts')){rzpOrders++;const b=JSON.parse(o.body);dodoReqs.push({b,auth:o.headers.Authorization});return jres(200,{session_id:'cks_'+rzpOrders,checkout_url:'https://checkout.dodo.test/cks_'+rzpOrders})}
  if(url.includes('generativelanguage.googleapis.com')){const b=JSON.parse(o.body);geminiCalls.push({url,b});return jres(200,gemReply||{candidates:[{content:{parts:[{text:'{"ok":1}'}]},finishReason:'STOP'}]})}
  if(url.startsWith('https://redir.test/')){return {ok:false,status:302,headers:{get:h=>h==='location'?'https://www.example.com/careers':null}}}
  throw new Error('unmocked '+url)};
@@ -64,27 +64,35 @@ r=await call('pay/order.js',{body:{planId:'combo'}});ok(r.code===401,'order requ
 r=await call('pay/order.js',{body:{planId:'free'},token:u1.token});ok(r.code===400,'free plan cannot be ordered');
 r=await call('pay/order.js',{body:{planId:'college'},token:u1.token});ok(r.code===400,'college plan cannot be ordered online');
 r=await call('pay/order.js',{body:{planId:'nope'},token:u1.token});ok(r.code===400,'unknown plan rejected');
-r=await call('pay/order.js',{body:{planId:'combo',amount:1},token:u1.token});ok(r.code===200&&r.body.amount===17900&&r.body.keyId==='rzp_test_1','order amount comes from the server (₹179 = 17900 paise), client amount ignored');
-const ord=r.body.orderId;
+r=await call('pay/order.js',{body:{planId:'combo',amount:1,productId:'pdt_evil'},token:u1.token});
+const dq=dodoReqs[dodoReqs.length-1];
+ok(r.code===200&&/^https:\/\/checkout\.dodo\.test\//.test(r.body.checkoutUrl)&&dq.b.product_cart[0].product_id==='pdt_combo'&&dq.auth==='Bearer dodo_key','checkout uses the server-side product for the plan; client price/product ignored');
+ok(dq.b.metadata.plan_id==='combo'&&dq.b.metadata.user_id===u1.id&&/^dd_/.test(dq.b.metadata.order_ref)&&dq.b.customer.email,'order carries our reference, user and email in metadata');
+ok(dq.b.return_url==='https://site.test/?paid=1','return URL points back to the site');
+const ord=dq.b.metadata.order_ref;
+ok((await pool.query("select status from payments where order_id=$1",[ord])).rows[0].status==='created','payment recorded as created (unpaid) until the webhook confirms');
 const before=(await rpcUser(u1,'select my_summary() s')).s;
-const sigOf=(o,p,sec='sec123')=>crypto.createHmac('sha256',sec).update(o+'|'+p).digest('hex');
-r=await call('pay/verify.js',{body:{razorpay_order_id:ord,razorpay_payment_id:'pay_A1',razorpay_signature:'0'.repeat(64)},token:u1.token});ok(r.code===400&&r.body.code==='bad_signature','forged signature rejected');
-let mid=(await rpcUser(u1,'select my_summary() s')).s;ok(mid.gd===before.gd&&mid.interviews===before.interviews,'nothing unlocked after a forged signature');
-r=await call('pay/verify.js',{body:{razorpay_order_id:ord,razorpay_payment_id:'pay_A1',razorpay_signature:sigOf(ord,'pay_A1')},token:u2.token});ok(r.code===200&&r.body.granted===false,"another user cannot claim someone else's paid order");
-r=await call('pay/verify.js',{body:{razorpay_order_id:ord,razorpay_payment_id:'pay_A1',razorpay_signature:sigOf(ord,'pay_A1')},token:u1.token});ok(r.code===200&&r.body.granted===true,'valid signature unlocks the plan');
+const evBody=(o,p,type='payment.succeeded')=>JSON.stringify({type,data:{payment_id:p,metadata:{order_ref:o}}});
+const sign=(body,o={})=>{const id=o.id||'msg_1',ts=o.ts||Math.floor(Date.now()/1000);const key=o.key||Buffer.from('webhook-secret-bytes');return{'webhook-id':id,'webhook-timestamp':String(ts),'webhook-signature':'v1,'+crypto.createHmac('sha256',key).update(id+'.'+ts+'.'+body).digest('base64')}};
+let b1=evBody(ord,'pay_A1');
+r=await call('pay/webhook.js',{raw:b1,headers:{'webhook-id':'m','webhook-timestamp':String(Math.floor(Date.now()/1000)),'webhook-signature':'v1,AAAA'}});ok(r.code===400,'forged webhook signature rejected');
+r=await call('pay/webhook.js',{raw:b1,headers:sign(b1,{key:Buffer.from('wrong')})});ok(r.code===400,'webhook signed with the wrong secret rejected');
+r=await call('pay/webhook.js',{raw:b1,headers:sign(b1,{ts:Math.floor(Date.now()/1000)-3600})});ok(r.code===400,'old (replayed) webhook rejected');
+let mid=(await rpcUser(u1,'select my_summary() s')).s;ok(mid.gd===before.gd&&mid.interviews===before.interviews,'nothing unlocked by forged/old webhooks');
+r=await call('pay/webhook.js',{raw:evBody(ord,'pay_A1','payment.failed'),headers:sign(evBody(ord,'pay_A1','payment.failed'))});ok(r.code===200&&r.body.ignored==='payment.failed','failed payment event ignored, nothing unlocked');
+r=await call('pay/webhook.js',{raw:b1,headers:sign(b1)});ok(r.code===200&&r.body.granted===true,'valid signed payment.succeeded unlocks the plan');
 let after=(await rpcUser(u1,'select my_summary() s')).s;ok(after.gd===before.gd+1&&after.interviews===before.interviews+1,`combo unlocked exactly +1 GD, +1 interview (gd ${before.gd}->${after.gd}, int ${before.interviews}->${after.interviews})`);
-r=await call('pay/verify.js',{body:{razorpay_order_id:ord,razorpay_payment_id:'pay_A1',razorpay_signature:sigOf(ord,'pay_A1')},token:u1.token});ok(r.code===200&&r.body.granted===false&&r.body.alreadyApplied,'repeat verify is idempotent');
-// webhook
-const evBody=(o,p)=>JSON.stringify({event:'payment.captured',payload:{payment:{entity:{id:p,order_id:o}}}});
-r=await call('pay/order.js',{body:{planId:'gd3'},token:u2.token});const ord2=r.body.orderId;
-let b2=evBody(ord2,'pay_B1');
-r=await call('pay/webhook.js',{raw:b2,headers:{'x-razorpay-signature':'bad'}});ok(r.code===400,'webhook with bad signature rejected');
-const wsig=crypto.createHmac('sha256','whsec').update(b2).digest('hex');
+r=await call('pay/webhook.js',{raw:b1,headers:sign(b1,{id:'msg_2'})});ok(r.code===200&&r.body.granted===false,'webhook retry is idempotent');
+// pack, with concurrent duplicate deliveries
+r=await call('pay/order.js',{body:{planId:'gd3'},token:u2.token});const ord2=dodoReqs[dodoReqs.length-1].b.metadata.order_ref;
 const pre=(await rpcUser(u2,'select my_summary() s')).s;
-const rs=await Promise.all([call('pay/webhook.js',{raw:b2,headers:{'x-razorpay-signature':wsig}}),call('pay/webhook.js',{raw:b2,headers:{'x-razorpay-signature':wsig}}),call('pay/verify.js',{body:{razorpay_order_id:ord2,razorpay_payment_id:'pay_B1',razorpay_signature:sigOf(ord2,'pay_B1')},token:u2.token})]);
-const post=(await rpcUser(u2,'select my_summary() s')).s;ok(post.gd===pre.gd+3,`2 webhooks + 1 verify racing -> pack credited exactly once (+3 GD: ${pre.gd}->${post.gd})`);
-r=await call('pay/webhook.js',{raw:JSON.stringify({event:'payment.failed',payload:{}}),headers:{'x-razorpay-signature':crypto.createHmac('sha256','whsec').update(JSON.stringify({event:'payment.failed',payload:{}})).digest('hex')}});ok(r.code===200&&r.body.ignored,'unrelated events ignored');
+let b2=evBody(ord2,'pay_B1');
+await Promise.all([call('pay/webhook.js',{raw:b2,headers:sign(b2,{id:'a'})}),call('pay/webhook.js',{raw:b2,headers:sign(b2,{id:'b'})}),call('pay/webhook.js',{raw:b2,headers:sign(b2,{id:'c'})})]);
+const post=(await rpcUser(u2,'select my_summary() s')).s;ok(post.gd===pre.gd+3,`3 racing webhook deliveries -> pack credited exactly once (+3 GD: ${pre.gd}->${post.gd})`);
+r=await call('pay/webhook.js',{raw:evBody('dd_unknown','pay_Z'),headers:sign(evBody('dd_unknown','pay_Z'))});ok(r.code===200&&r.body.granted===false,'unknown order reference grants nothing');
+// plan without a Dodo product configured
+const pc=process.env.DODO_PRODUCT_PRO;delete process.env.DODO_PRODUCT_PRO;r=await call('pay/order.js',{body:{planId:'pro'},token:u1.token});ok(r.code===503&&r.body.code==='payments_off','plan with no Dodo product reports payments_off, no pending order created');process.env.DODO_PRODUCT_PRO=pc;
 // payments off when keys missing
-const k=process.env.RAZORPAY_KEY_SECRET;delete process.env.RAZORPAY_KEY_SECRET;r=await call('pay/order.js',{body:{planId:'combo'},token:u1.token});ok(r.code===503&&r.body.code==='payments_off','without Razorpay keys checkout reports payments_off (no fake success)');
-r=await call('config.js',{method:'GET'});ok(r.body.payments===false,'config reports payments:false when keys missing');process.env.RAZORPAY_KEY_SECRET=k;
+const k=process.env.DODO_PAYMENTS_API_KEY;delete process.env.DODO_PAYMENTS_API_KEY;r=await call('pay/order.js',{body:{planId:'combo'},token:u1.token});ok(r.code===503&&r.body.code==='payments_off','without Dodo keys checkout reports payments_off (no fake success)');
+r=await call('config.js',{method:'GET'});ok(r.body.payments===false,'config reports payments:false when keys missing');process.env.DODO_PAYMENTS_API_KEY=k;
 console.log(`\n${pass} passed, ${fail} failed`);await pool.end();process.exit(fail?1:0);

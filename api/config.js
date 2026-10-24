@@ -9,7 +9,6 @@ module.exports = function handler(req, res) {
     supabaseUrl: backendOn() ? e.supabaseUrl : null,
     supabaseAnonKey: backendOn() ? e.anon : null,
     payments: paymentsOn(),
-    razorpayKeyId: paymentsOn() ? e.rzpId : null,
     ai: !!e.geminiKey
   });
 };

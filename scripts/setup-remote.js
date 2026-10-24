@@ -8,7 +8,7 @@
      VERCEL_TOKEN           vercel.com/account/tokens
      VERCEL_PROJECT         your Vercel project name (e.g. rolevia)
      SITE_URL               e.g. https://rolevia.xyz
-   Optional: VERCEL_TEAM_ID, GEMINI_API_KEY, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, RAZORPAY_WEBHOOK_SECRET
+   Optional: VERCEL_TEAM_ID, GEMINI_API_KEY, DODO_PAYMENTS_API_KEY, DODO_PAYMENTS_WEBHOOK_KEY, DODO_MODE, DODO_PRODUCT_COMBO, DODO_PRODUCT_GD3, DODO_PRODUCT_PRO, DODO_PRODUCT_PREMIUM
 
    Run:  node scripts/setup-remote.js
 */
@@ -48,8 +48,8 @@ const vc = (n, p, o) => call(n, "https://api.vercel.com" + p, o, E.VERCEL_TOKEN)
 
   console.log("4/5 Adding environment variables in Vercel…");
   const proj = await vc("project", q("/v9/projects/" + encodeURIComponent(E.VERCEL_PROJECT)));
-  const vars = { SUPABASE_URL: "https://" + ref + ".supabase.co", SUPABASE_ANON_KEY: anon, SUPABASE_SERVICE_ROLE_KEY: service };
-  for (const k of ["GEMINI_API_KEY", "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET"]) if (E[k]) vars[k] = E[k];
+  const vars = { SUPABASE_URL: "https://" + ref + ".supabase.co", SUPABASE_ANON_KEY: anon, SUPABASE_SERVICE_ROLE_KEY: service, SITE_URL: site };
+  for (const k of ["GEMINI_API_KEY", "DODO_PAYMENTS_API_KEY", "DODO_PAYMENTS_WEBHOOK_KEY", "DODO_MODE", "DODO_PRODUCT_COMBO", "DODO_PRODUCT_GD3", "DODO_PRODUCT_PRO", "DODO_PRODUCT_PREMIUM"]) if (E[k]) vars[k] = E[k];
   for (const [key, value] of Object.entries(vars)) {
     await vc("env " + key, q("/v10/projects/" + proj.id + "/env", "upsert=true"), { method: "POST", body: JSON.stringify({ key, value, type: "encrypted", target: ["production", "preview", "development"] }) });
     console.log("   set " + key);
@@ -61,5 +61,5 @@ const vc = (n, p, o) => call(n, "https://api.vercel.com" + p, o, E.VERCEL_TOKEN)
   if (!last) { console.log("   No earlier deployment found. Push a commit or click Deploy in Vercel."); return; }
   const d = await vc("redeploy", q("/v13/deployments", "forceNew=1"), { method: "POST", body: JSON.stringify({ name: E.VERCEL_PROJECT, deploymentId: last.uid, target: "production" }) });
   console.log("   Deployment started: https://" + (d.url || "(see Vercel dashboard)"));
-  console.log("\nDone. In about a minute open " + site + "/api/ai : backend should say true.\nStill to do by hand: Razorpay webhook (" + site + "/api/pay/webhook) if you use payments.");
+  console.log("\nDone. In about a minute open " + site + "/api/ai : backend should say true.\nStill to do by hand: Dodo webhook (" + site + "/api/pay/webhook) if you use payments.");
 })().catch(e => { console.error("\nStopped: " + e.message); process.exit(1); });

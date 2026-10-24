@@ -1,5 +1,5 @@
 <script>
-/* ---------- website backend layer (Supabase auth + database, Razorpay checkout) ----------
+/* ---------- website backend layer (Supabase auth + database, Dodo Payments checkout) ----------
    Only active on the hosted website when /api/config reports a configured backend.
    In the Claude artifact (no ROLEVIA_SITE) none of this runs and the app behaves as before. */
 const SITE=(function(){
@@ -106,7 +106,7 @@ const SITE=(function(){
   sb.auth.getSession().then(async({data})=>{const ses=data&&data.session;
    if(!ses&&S.user){T.drop();render();return}
    if(ses&&(!S.user||S.user.id!==ses.user.id)){T.adopt(ses.user)}
-   if(ses){await T.refresh();if(/^#\/(dashboard|pricing|gd|interviews)/.test(location.hash))render()}});};
+   if(ses){await T.refresh();if(/^#\/(dashboard|pricing|gd|interviews)/.test(location.hash))render();T.afterCheckout&&T.afterCheckout()}});};
  return T;
 })();
 
@@ -163,33 +163,31 @@ if(SITE.on){
   try{await cancelSeat(slot);toast("Seat cancelled");go("/gd/group")}catch(e){toast(SITE.msg(e))}};
 
  /* checkout */
- const rzp=()=>window.Razorpay?Promise.resolve():new Promise((res,rej)=>{const s=document.createElement("script");s.src="https://checkout.razorpay.com/v1/checkout.js";s.onload=res;s.onerror=()=>rej(new Error("The payment window could not be loaded. Disable content blockers and try again."));document.head.appendChild(s)});
  const pstat=(k,m)=>{const el=$("#paystat");if(el)el.innerHTML=k==="busy"?loading(m):`<div class="note ${k==="ok"?"ok":"bad"}" role="${k==="ok"?"status":"alert"}" style="margin-bottom:16px">${m}</div>`};
+ const pollPaid=async(before)=>{pstat("busy","Confirming your payment…");
+  for(let i=0;i<20;i++){await SITE.refresh();if(SITE.summary&&SITE.summary.gd+SITE.summary.interviews>before){pstat("ok",`<b>Payment confirmed.</b> Your sessions have been added. ${A("/interviews/new","Start an interview")} · ${A("/gd","Start a GD practice")}`);return}
+   await new Promise(r=>setTimeout(r,3000))}
+  pstat("err","We have not received the payment confirmation yet. If you completed the payment, your sessions are added automatically within a few minutes. Refresh this page to check.")};
  ACT.buy=async t=>{const plan=t.dataset.plan,pl=PLANS.find(p=>p.id===plan);if(!pl)return;
   if(!S.user){S.next="/pricing";return go("/login")}
   const btns=$$("[data-act=buy]");btns.forEach(b=>b.disabled=true);
   const done=()=>btns.forEach(b=>b.disabled=false);
   try{
-   pstat("busy","Creating your order…");
+   pstat("busy","Opening secure checkout…");
    const token=await ROLEVIA_AUTH.token();
    const r=await fetch("/api/pay/order",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+token},body:JSON.stringify({planId:plan})});
    const j=await r.json().catch(()=>({}));
-   if(!r.ok){pstat("err",esc(j.error||"Could not start the payment."));return done()}
-   await rzp();
-   const before=SITE.summary?SITE.summary.gd+SITE.summary.interviews:0;
-   const box=new Razorpay({key:j.keyId,amount:j.amount,currency:j.currency,name:"ROLEVIA",description:j.planName,order_id:j.orderId,prefill:{name:S.user.name,email:S.user.email},theme:{color:"#111111"},
-    modal:{ondismiss:()=>{pstat("err","Payment cancelled. You were not charged.");done()}},
-    handler:async resp=>{pstat("busy","Confirming your payment…");
-     try{const v=await fetch("/api/pay/verify",{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+(await ROLEVIA_AUTH.token())},body:JSON.stringify(resp)});
-      const vj=await v.json().catch(()=>({}));
-      if(!v.ok)throw new Error(vj.error||"Verification failed");
-      await SITE.refresh();pstat("ok",`<b>Payment confirmed.</b> ${esc(pl.name)} is now on your account. You have ${SITE.summary.interviews} interview${SITE.summary.interviews==1?"":"s"} and ${SITE.summary.gd} group GD${SITE.summary.gd==1?"":"s"} available. ${A("/interviews/new","Start an interview")} · ${A("/gd/group","Book a GD")}`)}
-     catch(err){if(/signature|did not match|invalid/i.test(String(err.message))){pstat("err",`We could not verify this payment (${esc(err.message)}). Nothing was unlocked. If money left your account, it is matched automatically by our payment provider; quote payment ID ${esc(resp.razorpay_payment_id||"")} if you contact us.`);return done()}
-      pstat("err",`We received your payment (ID ${esc(resp.razorpay_payment_id||"")}) but could not confirm it just now (${esc(err.message)}). Your sessions are added automatically within a minute once the bank confirms. Refresh this page to check.`);
-      for(let i=0;i<8;i++){await new Promise(r=>setTimeout(r,4000));await SITE.refresh();if(SITE.summary&&SITE.summary.gd+SITE.summary.interviews>before){pstat("ok","<b>Payment confirmed.</b> Your sessions have been added.");break}}}
-     done()}});
-   box.on("payment.failed",x=>{pstat("err","Payment failed"+(x&&x.error&&x.error.description?": "+esc(x.error.description):"")+". You were not charged. Try again.");done()});
-   pstat("busy","Opening the payment window…");box.open();$("#paystat").innerHTML="";
+   if(!r.ok||!j.checkoutUrl){pstat("err",esc(j.error||"Could not start the payment."));return done()}
+   try{sessionStorage.setItem("rolevia.paying",String(SITE.summary?SITE.summary.gd+SITE.summary.interviews:0))}catch(e){}
+   location.href=j.checkoutUrl;
   }catch(err){pstat("err",esc(err.message||"Something went wrong."));done()}};
+ /* back from checkout: Dodo returns to /?paid=1 (+payment_id, status). The webhook grants the plan; we just wait for it. */
+ SITE.afterCheckout=()=>{let q;try{q=new URLSearchParams(location.search)}catch(e){return}
+  if(!q.has("paid")&&!q.has("payment_id"))return;
+  const status=q.get("status");let before=0;try{before=+sessionStorage.getItem("rolevia.paying")||0;sessionStorage.removeItem("rolevia.paying")}catch(e){}
+  try{history.replaceState(null,"",location.pathname+"#/pricing")}catch(e){}
+  go("/pricing");
+  setTimeout(()=>{if(status&&!/succeeded|success/i.test(status)){pstat("err","The payment was not completed. You were not charged. Try again.");return}
+   pollPaid(before)},50)};
 }
 </script>
