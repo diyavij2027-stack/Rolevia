@@ -21,7 +21,7 @@ const cfg = JSON.parse(fs.readFileSync(path.join(root, "site.config.json"), "utf
 const esc = v => String(v).replace(/[^A-Za-z0-9_\-.:\/]/g, "");
 const extra = [
   `<link rel="canonical" href="${esc(cfg.siteUrl)}/">`,
-  `<meta property="og:type" content="website"><meta property="og:site_name" content="ROLEVIA"><meta property="og:title" content="ROLEVIA: AI interview and GD practice"><meta property="og:description" content="Company-specific, CV-based voice interview practice with strict, evidence-based feedback."><meta property="og:url" content="${esc(cfg.siteUrl)}/">`,
+  `<meta property="og:type" content="website"><meta property="og:site_name" content="Role.via"><meta property="og:title" content="Role.via: AI interview and GD practice"><meta property="og:description" content="Company-specific, CV-based voice interview practice with strict, evidence-based feedback."><meta property="og:url" content="${esc(cfg.siteUrl)}/">`,
   `<meta name="twitter:card" content="summary">`,
   cfg.googleSiteVerification ? `<meta name="google-site-verification" content="${esc(cfg.googleSiteVerification)}">` : "",
   cfg.clarityId ? `<script>(function(c,l,a,r,i,t,y){c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);})(window,document,"clarity","script","${esc(cfg.clarityId)}");</script>` : ""
@@ -33,7 +33,7 @@ const html = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="description" content="ROLEVIA: company-specific, CV-based voice interview practice, group discussion practice and preparation tracking.">
+<meta name="description" content="Role.via: company-specific, CV-based voice interview practice, group discussion practice and preparation tracking.">
 ${head}
 ${extra}
 <script>window.ROLEVIA_SITE=true;</script>
