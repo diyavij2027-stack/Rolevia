@@ -1,6 +1,6 @@
 # Product Marketing Context
 
-**Document version:** v1
+**Document version:** v2
 **Last updated:** 2026-10-29
 
 > Auto-drafted from the repo (`src/*.html`, `plans.json`, `README.md`), with the site rendered locally. The live rolevia.xyz could not be fetched, so anything the deployed build changes is not reflected here. Items marked **[CONFIRM]** are inferences; **[MISSING]** means nothing in the repo supports it yet.
@@ -23,7 +23,8 @@
 | College Plan | From $20 (₹1,799) / student / year | Student prep, placement-cell dashboard, aggregate insights (contact sales) |
 
 ## Target Audience
-**Target users:** Students, graduates and working professionals preparing for interviews; the site says it aims to be "useful to students, graduates and working professionals, and credible to placement cells." Signals point to **Indian campus placements** as the core: GD rounds, INR checkout, en-IN date formats, Indian recruiters in the company list (TCS, Infosys, HDFC Bank, HUL, Flipkart, Swiggy), "Campus placement" and "Student / Fresher" options, and a placement-cell plan. **[CONFIRM]**
+**Primary audience (confirmed):** Indian campus placement candidates: final-year students and freshers facing GD and interview rounds. Secondary: graduates and working professionals.
+**Target users:** Students, graduates and working professionals preparing for interviews; the site says it aims to be "useful to students, graduates and working professionals, and credible to placement cells." Signals point to **Indian campus placements** as the core: GD rounds, INR checkout, en-IN date formats, Indian recruiters in the company list (TCS, Infosys, HDFC Bank, HUL, Flipkart, Swiggy), "Campus placement" and "Student / Fresher" options, and a placement-cell plan. Confirmed by the founder 2026-10-29.
 **Experience levels supported:** Student / Fresher, 0–2 years, 3–6 years, 7+ years.
 **Roles supported:** Marketing, Finance, Consulting, Sales, Product Management, Operations, Technology, Human Resources, Data & Analytics.
 **Rounds supported:** HR / Behavioural, Case / Problem solving, Technical / Role knowledge, Managerial, Final / Leadership, plus a separate Situational & Case-Based round.
@@ -123,6 +124,7 @@
 **Never use (and why):** "guaranteed", "AI predicts your hiring chances" (contradicts the product's stated stance).
 
 ## Proof Points
+**Policy (founder, 2026-10-29):** No proof exists yet. Never invent user numbers, quotes, ratings or college names; write without them.
 **Metrics:** **[MISSING]** No users, sessions, or outcome numbers.
 **Customers:** **[MISSING]** No colleges or logos.
 **Testimonials:** **[MISSING]**
@@ -142,16 +144,20 @@
 ## Issues Spotted in Current Copy
 - **Help says company profiles are "written by Claude"**, while the README and privacy notice say Gemini.
 - **How It Works step 4 says "Book a slot"** for group GDs, but the README says group booking was removed from the UI.
-- **Premium ($9) gives fewer interviews (30) than Placement Pro ($7, 60).** The higher-priced plan looks worse on the headline number.
+- **Premium ($9) gives fewer interviews (30) than Placement Pro ($7, 60).** Founder decision: pricing stays as is; copy must not compare Premium with Placement Pro.
 - **Homepage pricing shows an internal note:** "Proposed prices to test, not validated market rates."
-- **Brand name:** latest commit renamed the visible brand to "Role.via"; domain and repo use "Rolevia". Pick one for marketing.
+- **Brand name:** resolved. Use "Role.via" in all marketing copy.
 
 ## Learnings
 *Decisions and tested lessons. Newest first. Keep it to about 20 active entries.*
 | Date | Learning | Evidence | Applies to | Status |
 |------|----------|----------|------------|--------|
-| | | | | |
+| 2026-10-29 | Do not compare Premium with Placement Pro anywhere in copy; pricing stays as is | Founder decision | Homepage, pricing, ads, emails | active |
+| 2026-10-29 | Write without proof: no invented user numbers, quotes or college names until real ones exist | Founder decision; no proof available | All copy | active |
+| 2026-10-29 | Brand name in copy is "Role.via" | Founder decision | All copy | active |
+| 2026-10-29 | Primary audience is Indian campus placement candidates | Founder confirmation | All copy | active |
 
 ## Changelog
 *Newest first. One line per revision: what changed and why.*
+- v2 (2026-10-29) — Confirmed Indian campus placements as primary audience; set brand to "Role.via"; added no-invented-proof policy; recorded pricing decision (no Premium vs Placement Pro comparison) in Issues and Learnings.
 - v1 (2026-10-29) — Initial context, auto-drafted from the repo source and locally rendered site.
