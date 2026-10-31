@@ -1,0 +1,398 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Role.via Auto Apply launch</title>
+<style>
+@font-face{font-family:Sora;font-weight:700;src:url(node_modules/@fontsource/sora/files/sora-latin-700-normal.woff2) format("woff2")}
+@font-face{font-family:Sora;font-weight:800;src:url(node_modules/@fontsource/sora/files/sora-latin-800-normal.woff2) format("woff2")}
+@font-face{font-family:"DM Sans";font-weight:500;src:url(node_modules/@fontsource/dm-sans/files/dm-sans-latin-500-normal.woff2) format("woff2")}
+@font-face{font-family:"DM Sans";font-weight:700;src:url(node_modules/@fontsource/dm-sans/files/dm-sans-latin-700-normal.woff2) format("woff2")}
+:root{--blue:#0A14B8;--navy:#0B0F3A;--lav:#A9A8F5;--lav-soft:#E6E5FD;--good:#12704A;--good-bg:#DDF3E8;--u:1vmin}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#05071c;color:#fff;font-family:"DM Sans",sans-serif}
+canvas{position:fixed;inset:0}
+.ov{position:fixed;inset:0;pointer-events:none}
+#vignette{background:radial-gradient(ellipse at center,rgba(0,0,0,0) 55%,rgba(2,3,15,.65) 100%)}
+#flash{background:#fff;opacity:0}
+#brand{position:fixed;top:calc(var(--u)*5);left:calc(var(--u)*5);font:800 calc(var(--u)*3.6) Sora;letter-spacing:-.02em;opacity:0}
+#brand b{color:var(--lav)}
+#kicker{position:fixed;left:0;right:0;text-align:center;opacity:0}
+#kicker .k{display:inline-block;font:700 calc(var(--u)*2.4) "DM Sans";letter-spacing:.32em;color:var(--lav);padding:calc(var(--u)*1) calc(var(--u)*2.4);border:1px solid rgba(169,168,245,.45);border-radius:999px;background:rgba(10,20,184,.25)}
+#kicker .h{font:800 calc(var(--u)*5.6) Sora;letter-spacing:-.02em;margin-top:calc(var(--u)*1.6);line-height:1.08}
+#capbg{background:linear-gradient(to bottom,rgba(3,4,15,0) 62%,rgba(3,4,15,.82) 80%,rgba(3,4,15,.9) 100%)}
+#cap{position:fixed;left:7%;right:7%;text-align:center;font:700 calc(var(--u)*4.1) "DM Sans";line-height:1.28;text-shadow:0 2px 18px rgba(0,0,0,.6)}
+#cap span{opacity:.18;transition:none;white-space:nowrap}
+#cap span.on{opacity:1}
+#cap span.now{color:var(--lav)}
+.again{position:fixed;left:50%;top:50%;font:800 calc(var(--u)*17) Sora;letter-spacing:-.04em;color:rgba(169,168,245,.22);-webkit-text-stroke:3px #C9C8FF;text-shadow:0 0 30px rgba(169,168,245,.8);white-space:nowrap;opacity:0}
+.bub{position:fixed;max-width:62%;padding:calc(var(--u)*2.2) calc(var(--u)*2.8);border-radius:calc(var(--u)*3);font:500 calc(var(--u)*2.9) "DM Sans";line-height:1.35;opacity:0}
+.bub small{display:block;font:700 calc(var(--u)*1.9) "DM Sans";letter-spacing:.2em;margin-bottom:calc(var(--u)*.8);opacity:.75}
+.bub.ai{left:7%;background:#fff;color:var(--navy);border-bottom-left-radius:calc(var(--u)*.8)}
+.bub.me{right:7%;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-bottom-right-radius:calc(var(--u)*.8)}
+.bub.fu{left:7%;background:var(--blue);color:#fff;border-bottom-left-radius:calc(var(--u)*.8);box-shadow:0 0 calc(var(--u)*6) rgba(169,168,245,.55)}
+#cta{position:fixed;left:0;right:0;text-align:center;opacity:0}
+#cta .k{font:700 calc(var(--u)*2.6) "DM Sans";letter-spacing:.32em;color:var(--lav)}
+#cta .pill{display:inline-block;margin-top:calc(var(--u)*3);padding:calc(var(--u)*2) calc(var(--u)*4.4);border-radius:999px;background:#fff;color:var(--blue);font:800 calc(var(--u)*3.4) Sora;box-shadow:0 0 calc(var(--u)*8) rgba(169,168,245,.6)}
+</style>
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+</head>
+<body>
+<div class="ov" id="vignette"></div>
+<div id="brand">Role<b>.</b>via</div>
+<div id="kicker"><span class="k"></span><div class="h"></div></div>
+<div class="again" id="ag0">AGAIN</div><div class="again" id="ag1">AGAIN</div><div class="again" id="ag2">AGAIN</div>
+<div class="bub ai" id="b0"><small>AI INTERVIEWER</small>Tell me about this project from your CV. What did you personally do?</div>
+<div class="bub me" id="b1"><small>YOU</small>I led the team and we improved things a lot.</div>
+<div class="bub fu" id="b2"><small>FOLLOW-UP</small>What exactly was your own role there, and what decisions did you make?</div>
+<div id="cta"><div class="k">NEW: AUTO APPLY</div><div class="pill">Start free at rolevia.xyz</div></div>
+<div class="ov" id="capbg"></div>
+<div id="cap"></div>
+<div class="ov" id="flash"></div>
+<script type="module">
+import * as THREE from 'three';
+import {EffectComposer} from 'three/addons/postprocessing/EffectComposer.js';
+import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
+import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
+import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
+
+const Q = new URLSearchParams(location.search);
+const W = +Q.get('w') || 1080, H = +Q.get('h') || 1920, portrait = H > W;
+document.documentElement.style.setProperty('--u', (Math.min(W, H) / 100) + 'px');
+const TL = await (await fetch('timeline.json')).json();
+const S = Object.fromEntries(TL.segments.map(s => [s.id, s]));
+await Promise.all(['800 100px Sora', '700 100px Sora', '500 20px "DM Sans"', '700 20px "DM Sans"'].map(f => document.fonts.load(f)));
+
+/* ---------- helpers ---------- */
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const eio = x => x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const eout = x => 1 - Math.pow(1 - x, 3);
+const eback = x => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+const win = (t, a, b, fi = .3, fo = .3) => Math.min(seg(t, a, a + fi), 1 - seg(t, b - fo, b));
+function mulberry(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const R = mulberry(20261031), rr = (a, b) => a + (b - a) * R();
+// Time a word is spoken, estimated from its position in the caption.
+function wordTime(id, word, nth = 0) {
+  const s = S[id], c = s.cap.toLowerCase(); let i = -1;
+  for (let k = 0; k <= nth; k++) i = c.indexOf(word.toLowerCase(), i + 1);
+  return s.start + (s.end - s.start) * (i / c.length);
+}
+
+/* ---------- renderer, camera, background ---------- */
+const renderer = new THREE.WebGLRenderer({antialias: true, preserveDrawingBuffer: true});
+renderer.setPixelRatio(1); renderer.setSize(W, H);
+document.body.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+const cam = new THREE.PerspectiveCamera(40, W / H, .1, 100);
+const DIST = 10, VH = 2 * DIST * Math.tan(THREE.MathUtils.degToRad(20)), VW = VH * W / H, U = Math.min(VW, VH);
+{
+  const c = document.createElement('canvas'); c.width = 64; c.height = 128; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(32, 52, 4, 32, 64, 90); gr.addColorStop(0, '#16208a'); gr.addColorStop(.45, '#0a0f45'); gr.addColorStop(1, '#03040f');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 128);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; scene.background = t;
+}
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, cam));
+const bloom = new UnrealBloomPass(new THREE.Vector2(W, H), .6, .5, .9);
+composer.addPass(bloom); composer.addPass(new OutputPass());
+
+/* ---------- application-form cards ---------- */
+function formTexture(applied) {
+  const c = document.createElement('canvas'); c.width = 420; c.height = 560; const g = c.getContext('2d');
+  const rr2 = (x, y, w, h, r) => { g.beginPath(); g.roundRect(x, y, w, h, r); };
+  rr2(0, 0, 420, 560, 34); g.fillStyle = '#ffffff'; g.fill(); g.save(); g.clip();
+  g.fillStyle = '#0A14B8'; g.fillRect(0, 0, 420, 78);
+  g.fillStyle = '#fff'; g.font = '700 26px Sora'; g.fillText('Application form', 28, 50);
+  const labels = ['Full name', 'Email', 'Phone', 'CGPA', 'Upload CV', 'Why this company?'];
+  labels.forEach((l, i) => {
+    const y = 110 + i * 70; g.fillStyle = '#575B7E'; g.font = '500 17px "DM Sans"'; g.fillText(l, 28, y);
+    rr2(28, y + 10, 364, i === 5 ? 56 : 34, 8); g.fillStyle = '#EDEDF0'; g.fill();
+    if (applied || i < 2) { g.fillStyle = '#C9CAD9'; g.fillRect(40, y + 22, 120 + (i * 47) % 150, 10); }
+  });
+  g.restore();
+  if (applied) {
+    g.save(); g.translate(210, 300); g.rotate(-.22);
+    rr2(-150, -52, 300, 104, 18); g.fillStyle = 'rgba(221,243,232,.95)'; g.fill();
+    g.lineWidth = 7; g.strokeStyle = '#12704A'; g.stroke();
+    g.fillStyle = '#12704A'; g.font = '800 46px Sora'; g.textAlign = 'center'; g.fillText('APPLIED ✓', 0, 16);
+    g.restore();
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+}
+const texBlank = formTexture(false), texApplied = formTexture(true);
+const CW = U * (portrait ? .3 : .17), cardGeo = new THREE.PlaneGeometry(CW, CW * 4 / 3);
+const cardMat = (tex) => new THREE.MeshBasicMaterial({map: tex, transparent: true, color: 0xe6e6ee, side: THREE.DoubleSide});
+
+const h0 = S.hook.start - .4, h1 = S.reveal.start - .1;
+const pile = [];
+for (let i = 0; i < 38; i++) {
+  const m = new THREE.Mesh(cardGeo, cardMat(texBlank)); scene.add(m);
+  pile.push({m, a: h0 + (i / 38) * (h1 - h0) * .92, x: rr(-.48, .48) * VW, y: rr(-.42, .42) * VH, z: rr(-4, 1.2),
+    rx: rr(-.5, .5), ry: rr(-.6, .6), rz: rr(-.6, .6), ang: R() * Math.PI * 2, ph: R() * 6});
+}
+const queue = [];
+for (let j = 0; j < 9; j++) { const m = new THREE.Mesh(cardGeo, cardMat(texBlank)); scene.add(m); queue.push({m, l: S.apply.start - .25 + j * .36}); }
+const PA = portrait ? new THREE.Vector3(-VW * .85, -VH * .34, 0) : new THREE.Vector3(-VW * .62, -VH * .22, 0);
+const PC = portrait ? new THREE.Vector3(VW * .55, -VH * .12, 2) : new THREE.Vector3(-VW * .05, VH * .38, 2);
+const PB = portrait ? new THREE.Vector3(0, VH * .14, 0) : new THREE.Vector3(VW * .27, VH * .02, 0);
+const bez = (u) => new THREE.Vector3().copy(PA).multiplyScalar((1 - u) ** 2).add(PC.clone().multiplyScalar(2 * u * (1 - u))).add(PB.clone().multiplyScalar(u * u));
+
+/* ---------- portal ---------- */
+const portal = new THREE.Group(); portal.position.copy(PB); scene.add(portal);
+const ringMat = new THREE.MeshBasicMaterial({color: new THREE.Color().setRGB(1.6, 1.6, 3.2), transparent: true});
+const ring = new THREE.Mesh(new THREE.TorusGeometry(U * .2, U * .008, 16, 160), ringMat); portal.add(ring);
+const ring2 = new THREE.Mesh(new THREE.TorusGeometry(U * .235, U * .003, 8, 160), new THREE.MeshBasicMaterial({color: 0xA9A8F5, transparent: true, opacity: .6})); portal.add(ring2);
+const glow = (() => { const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
+  const gr = g.createRadialGradient(128, 128, 0, 128, 128, 128); gr.addColorStop(0, 'rgba(169,168,245,.9)'); gr.addColorStop(.5, 'rgba(10,20,184,.35)'); gr.addColorStop(1, 'rgba(10,20,184,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 256, 256); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+const disc = new THREE.Mesh(new THREE.PlaneGeometry(U * .55, U * .55), new THREE.MeshBasicMaterial({map: glow, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false})); portal.add(disc);
+
+/* ---------- shockwave ---------- */
+const shock = new THREE.Mesh(new THREE.TorusGeometry(1, .015, 8, 200), new THREE.MeshBasicMaterial({color: new THREE.Color().setRGB(2, 2, 3), transparent: true}));
+scene.add(shock);
+
+/* ---------- particles ---------- */
+const N = portrait ? 6500 : 12000;
+function textPoints(lines, widthFrac, yOff, weight = 800) {
+  const c = document.createElement('canvas'), cw = 1400, lh = 300; c.width = cw; c.height = lh * lines.length; const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  let fs = 260; g.font = `${weight} ${fs}px Sora`;
+  const mw = Math.max(...lines.map(l => g.measureText(l).width)); fs = Math.min(fs, fs * (cw * .96) / mw); g.font = `${weight} ${fs}px Sora`;
+  lines.forEach((l, i) => g.fillText(l, cw / 2, lh * (i + .5)));
+  const d = g.getImageData(0, 0, c.width, c.height).data, pts = [];
+  for (let y = 0; y < c.height; y += 3) for (let x = 0; x < cw; x += 3) if (d[(y * cw + x) * 4 + 3] > 140) pts.push([x, y]);
+  const sc = VW * widthFrac / cw, out = new Float32Array(N * 3), r = mulberry(lines.join().length * 97);
+  for (let i = 0; i < N; i++) { const p = pts[Math.floor(r() * pts.length)];
+    out[i * 3] = (p[0] - cw / 2) * sc + (r() - .5) * sc * 3; out[i * 3 + 1] = -(p[1] - c.height / 2) * sc + yOff + (r() - .5) * sc * 3; out[i * 3 + 2] = (r() - .5) * .25; }
+  return out;
+}
+const T_scatter = new Float32Array(N * 3), T_ring = new Float32Array(N * 3), T_center = new Float32Array(N * 3), dirs = new Float32Array(N * 3), delay = new Float32Array(N);
+for (let i = 0; i < N; i++) {
+  T_scatter.set([rr(-.75, .75) * VW, rr(-.65, .65) * VH, rr(-7, 2)], i * 3);
+  const a = R() * Math.PI * 2, rad = U * (.28 + .04 * (R() - .5) + .012 * Math.sin(a * 12));
+  T_ring.set([Math.cos(a) * rad, Math.sin(a) * rad + (portrait ? VH * .05 : 0), (R() - .5) * .4], i * 3);
+  T_center.set([(R() - .5) * .2, (R() - .5) * .2, (R() - .5) * .2], i * 3);
+  const v = new THREE.Vector3(R() - .5, R() - .5, R() - .5).normalize(); dirs.set([v.x, v.y, v.z], i * 3); delay[i] = R();
+}
+const T_auto = portrait ? textPoints(['AUTO', 'APPLY'], .9, VH * .04) : textPoints(['AUTO APPLY'], .8, VH * .04);
+const T_logo = textPoints(['Role.via'], portrait ? .82 : .5, portrait ? VH * .1 : VH * .13);
+const TG = {scatter: T_scatter, auto: T_auto, ring: T_ring, logo: T_logo, center: T_center};
+const KF = [
+  {t: -1, to: 'scatter'},
+  {t: S.reveal.start - .08, from: 'center', to: 'auto', dur: 1.05, spread: .3, swirl: 1.4},
+  {t: S.apply.start - .2, to: 'scatter', dur: 1.3, spread: .35, swirl: 1.2},
+  {t: S.pivot.start - .3, to: 'ring', dur: 1.1, spread: .35, swirl: .9},
+  {t: S.research.start - .15, to: 'scatter', dur: 1.1, spread: .3, swirl: .8},
+  {t: S.cta.start - .3, to: 'logo', dur: 1.3, spread: .4, swirl: 1.3},
+];
+const pGeo = new THREE.BufferGeometry(), pos = new Float32Array(N * 3), size = new Float32Array(N), col = new Float32Array(N * 3);
+const palette = [[1, 1, 1], [.66, .66, .96], [.75, .78, 1], [.35, .42, 1]];
+for (let i = 0; i < N; i++) { size[i] = rr(.6, 1.6); col.set(palette[Math.floor(R() * palette.length)], i * 3); }
+pGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+pGeo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
+pGeo.setAttribute('aCol', new THREE.BufferAttribute(col, 3));
+const pMat = new THREE.ShaderMaterial({
+  uniforms: {uScale: {value: Math.min(W, H) * .0037}, uGain: {value: 1}, uOpacity: {value: 1}},
+  vertexShader: `attribute float aSize;attribute vec3 aCol;varying vec3 vCol;uniform float uScale,uGain;
+    void main(){vCol=aCol;vec4 mv=modelViewMatrix*vec4(position,1.);gl_PointSize=aSize*uScale*uGain*(10./-mv.z);gl_Position=projectionMatrix*mv;}`,
+  fragmentShader: `varying vec3 vCol;uniform float uOpacity;void main(){float d=length(gl_PointCoord-.5);if(d>.5)discard;float a=smoothstep(.5,.0,d);gl_FragColor=vec4(vCol*.85,a*uOpacity);}`,
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending});
+scene.add(new THREE.Points(pGeo, pMat));
+
+/* ---------- company research panel ---------- */
+const PW = portrait ? U * .8 : U * .47;
+const pc = document.createElement('canvas'); pc.width = 900; pc.height = 1000; const pg = pc.getContext('2d');
+const panelTex = new THREE.CanvasTexture(pc); panelTex.colorSpace = THREE.SRGBColorSpace; panelTex.anisotropy = 4;
+const panel = new THREE.Mesh(new THREE.PlaneGeometry(PW, PW * 1000 / 900), new THREE.MeshBasicMaterial({map: panelTex, transparent: true, color: 0xe9e9f0, side: THREE.DoubleSide}));
+scene.add(panel);
+const ROWS = [
+  {h: 'Overview', s: 'Business model, products, competitors', chip: 'VERIFIED', fg: '#12704A', bg: '#DDF3E8', at: wordTime('research', 'verified')},
+  {h: 'Culture', s: 'Stated values, with labels', chip: 'REPORTED', fg: '#8A5A00', bg: '#FFF0CC', at: wordTime('research', 'reported')},
+  {h: 'Hiring', s: 'Process and rounds, where known', chip: 'AI-GENERATED', fg: '#0A14B8', bg: '#E6E5FD', at: wordTime('research', 'ai-generated')},
+];
+function drawPanel(t) {
+  const g = pg; g.clearRect(0, 0, 900, 1000);
+  g.beginPath(); g.roundRect(0, 0, 900, 1000, 48); g.fillStyle = '#fff'; g.fill();
+  g.fillStyle = '#0A14B8'; g.font = '700 30px "DM Sans"'; g.fillText('COMPANY INTELLIGENCE', 60, 100);
+  g.fillStyle = '#0B0F3A'; g.font = '800 62px Sora'; g.fillText('Your target company', 60, 180);
+  g.fillStyle = '#E2E2E6'; g.fillRect(60, 225, 780, 3);
+  ROWS.forEach((r, i) => {
+    const p = eout(seg(t, r.at - .55, r.at - .1)), y = 300 + i * 220;
+    g.save(); g.globalAlpha = p; g.translate((1 - p) * 60, 0);
+    g.fillStyle = '#0B0F3A'; g.font = '800 44px Sora'; g.fillText(r.h, 60, y + 20);
+    g.fillStyle = '#575B7E'; g.font = '500 32px "DM Sans"'; g.fillText(r.s, 60, y + 76);
+    g.restore();
+    const cp = seg(t, r.at - .05, r.at + .3), sc = cp > 0 ? eback(cp) : 0;
+    if (sc > 0) {
+      g.save(); g.font = '800 26px "DM Sans"'; const w = g.measureText(r.chip).width + 56;
+      g.translate(840 - w / 2, y + 6); g.scale(sc, sc);
+      g.beginPath(); g.roundRect(-w / 2, -30, w, 60, 30); g.fillStyle = r.bg; g.fill(); g.lineWidth = 3; g.strokeStyle = r.fg; g.stroke();
+      g.fillStyle = r.fg; g.textAlign = 'center'; g.fillText(r.chip, 0, 10); g.restore();
+    }
+    if (i < 2) { g.fillStyle = '#EDEDF0'; g.fillRect(60, y + 125, 780, 2); }
+  });
+  panelTex.needsUpdate = true;
+}
+
+/* ---------- AI interviewer: orb and voice ring ---------- */
+const orbG = new THREE.Group(); orbG.position.set(0, portrait ? VH * .2 : VH * .02, 0); if (!portrait) orbG.position.x = VW * .25; scene.add(orbG);
+const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(U * .1, 1), new THREE.MeshBasicMaterial({color: new THREE.Color().setRGB(1.4, 1.4, 3), wireframe: true, transparent: true}));
+const core = new THREE.Mesh(new THREE.SphereGeometry(U * .055, 32, 16), new THREE.MeshBasicMaterial({color: 0x0A14B8, transparent: true}));
+orbG.add(orb, core);
+const bars = [], NB = 96, barGeo = new THREE.BoxGeometry(U * .009, U * .1, U * .009);
+for (let i = 0; i < NB; i++) {
+  const c = new THREE.Color().lerpColors(new THREE.Color(0xA9A8F5), new THREE.Color(0x3846ff), (Math.sin(i / NB * Math.PI * 2) + 1) / 2).multiplyScalar(1.5);
+  const b = new THREE.Mesh(barGeo, new THREE.MeshBasicMaterial({color: c, transparent: true})); const a = i / NB * Math.PI * 2;
+  b.userData.a = a; orbG.add(b); bars.push(b);
+}
+
+/* ---------- DOM refs ---------- */
+const $ = id => document.getElementById(id);
+const capEl = $('cap'), brand = $('brand'), kicker = $('kicker'), flash = $('flash'), cta = $('cta');
+let capId = null, capWords = [];
+const capTop = portrait ? .78 : .84;
+capEl.style.top = (capTop * 100) + '%';
+kicker.style.top = portrait ? '9%' : '7%';
+cta.style.top = portrait ? '58%' : '55%';
+if (!portrait) $('capbg').style.background = 'linear-gradient(to bottom,rgba(3,4,15,0) 72%,rgba(3,4,15,.85) 88%)';
+['b0', 'b1', 'b2'].forEach((id, i) => $(id).style.top = portrait ? (44 + i * 9.5) + '%' : (24 + i * 17) + '%');
+if (!portrait) ['b0', 'b1', 'b2'].forEach(id => { const e = $(id); e.style.maxWidth = '38%'; if (id === 'b1') { e.style.right = 'auto'; e.style.left = '13%'; } });
+const agEls = [0, 1, 2].map(i => $('ag' + i));
+const agT = [0, 1, 2].map(i => wordTime('hook', 'again', i));
+const bubT = [S.practise.start + .2, S.practise.start + 1.6, wordTime('practise', 'follows') - .2];
+
+function setCaption(t) {
+  const s = TL.segments.find(s => t >= s.start - .15 && t <= s.end + .35);
+  if (!s) { capEl.style.opacity = 0; return; }
+  capEl.style.opacity = 1;
+  if (capId !== s.id) { capId = s.id; capEl.innerHTML = s.cap.split(' ').map(w => `<span>${w}</span>`).join(' '); capWords = [...capEl.children]; }
+  const total = s.cap.length; let acc = 0;
+  capWords.forEach((w, i) => { const wt = s.start + (s.end - s.start) * (acc / total); acc += w.textContent.length + 1;
+    w.className = t >= wt ? (i === capWords.length - 1 || t < s.start + (s.end - s.start) * (acc / total) ? 'on now' : 'on') : ''; });
+}
+function setKicker(t) {
+  const scenes = [
+    {a: S.apply.start - .2, b: S.pivot.start + .2, k: 'AUTO APPLY', h: 'Applications, sent for you'},
+    {a: S.research.start, b: S.practise.start - .1, k: 'COMPANY RESEARCH', h: portrait ? 'Know the company' : 'Know the company'},
+    {a: S.practise.start, b: S.cta.start - .2, k: 'AI MOCK INTERVIEW', h: 'Practise out loud'},
+  ];
+  const sc = scenes.find(x => t >= x.a && t <= x.b);
+  if (!sc) { kicker.style.opacity = 0; return; }
+  const o = win(t, sc.a, sc.b, .35, .3);
+  if (kicker.dataset.k !== sc.k) { kicker.dataset.k = sc.k; kicker.querySelector('.k').textContent = sc.k; kicker.querySelector('.h').textContent = sc.h; }
+  kicker.style.opacity = o; kicker.style.transform = `translateY(${(1 - eout(seg(t, sc.a, sc.a + .5))) * 30}px)`;
+}
+
+/* ---------- frame ---------- */
+const tmp = new THREE.Vector3();
+window.renderAt = (t) => {
+  // camera: shake building through the hook, slow drift afterwards
+  const shake = .05 * seg(t, h0, h1) * (1 - seg(t, S.reveal.start, S.reveal.start + .3));
+  cam.position.set(Math.sin(t * .23) * .25 + Math.sin(t * 37) * shake, Math.cos(t * .19) * .15 + Math.cos(t * 29) * shake, DIST - .6 * seg(t, S.cta.start - .3, TL.duration));
+  cam.lookAt(0, 0, 0);
+
+  // pile of forms, then the vortex
+  const v0 = S.reveal.start - .4, v1 = S.reveal.start + .35;
+  for (const c of pile) {
+    const m = c.m; if (t < c.a || t > v1) { m.visible = false; continue; } m.visible = true;
+    const p = eback(seg(t, c.a, c.a + .35)), vp = eio(seg(t, v0, v1));
+    const x = c.x, y = c.y + Math.sin(t * 1.3 + c.ph) * .08, z = c.z;
+    const ang = c.ang + vp * Math.PI * 3, rad = Math.hypot(x, y) * (1 - vp);
+    const sx = vp > 0 ? Math.cos(ang) * rad : x, sy = vp > 0 ? Math.sin(ang) * rad : y;
+    m.position.set(THREE.MathUtils.lerp(x, sx, Math.min(1, vp * 3)), THREE.MathUtils.lerp(y, sy, Math.min(1, vp * 3)), z * (1 - vp));
+    m.rotation.set(c.rx * (1 - vp), c.ry * (1 - vp), c.rz + vp * 5 + Math.sin(t + c.ph) * .05);
+    m.scale.setScalar(Math.max(.001, p * (1 - vp)));
+  }
+
+  // queue of applications flying into the portal
+  for (const c of queue) {
+    const u = seg(t, c.l, c.l + 1.45), m = c.m;
+    if (u <= 0 || u >= 1) { m.visible = false; continue; } m.visible = true;
+    const e = eio(u); m.position.copy(bez(e));
+    const tan = bez(Math.min(1, e + .01)).sub(bez(Math.max(0, e - .01)));
+    m.rotation.set(-.15, .35 * (1 - e), Math.atan2(tan.y, tan.x) * .25);
+    m.material.map = u > .5 ? texApplied : texBlank;
+    const pop = u > .5 ? 1 + .18 * Math.exp(-(u - .5) * 18) : 1;
+    m.scale.setScalar(pop * Math.min(eout(seg(u, 0, .12)), 1 - eio(seg(u, .78, 1))) + .001);
+  }
+
+  // portal
+  const pv = win(t, S.apply.start - .5, S.pivot.start + .5, .5, .5);
+  portal.visible = pv > 0;
+  let pulse = 0; for (const c of queue) { const arr = c.l + 1.45; if (t > arr) pulse += Math.exp(-(t - arr) * 7); }
+  portal.scale.setScalar(Math.max(.001, eback(pv) * (1 + .1 * pulse)));
+  ring.rotation.z = t * .6; ring2.rotation.z = -t * .4; ring2.rotation.x = Math.sin(t) * .3;
+  ringMat.opacity = pv; ring2.material.opacity = .6 * pv; disc.material.opacity = pv * (.7 + .3 * pulse);
+
+  // shockwave on the reveal
+  const sp = seg(t, S.reveal.start - .05, S.reveal.start + 1.1);
+  shock.visible = sp > 0 && sp < 1; shock.scale.setScalar(.2 + eout(sp) * U * 1.1); shock.material.opacity = 1 - sp;
+
+  // particles
+  let k = 0; for (let i = 0; i < KF.length; i++) if (t >= KF[i].t) k = i;
+  const kf = KF[k], from = TG[kf.from || KF[Math.max(0, k - 1)].to], to = TG[kf.to];
+  for (let i = 0; i < N; i++) {
+    const p = k === 0 ? 1 : eout(clamp((t - kf.t - delay[i] * kf.spread) / kf.dur));
+    const sw = k === 0 ? 0 : Math.sin(p * Math.PI) * kf.swirl;
+    const drift = (kf.to === 'scatter' ? .25 : .025);
+    for (let a = 0; a < 3; a++) {
+      const j = i * 3 + a;
+      pos[j] = from[j] + (to[j] - from[j]) * p + dirs[j] * sw + Math.sin(t * (.5 + delay[i]) + i * (a + 1)) * drift;
+    }
+  }
+  pGeo.attributes.position.needsUpdate = true;
+  const formed = (kf.to === 'scatter' || k === 0) ? 0 : clamp((t - kf.t) / kf.dur);
+  pMat.uniforms.uOpacity.value = .5 + (portrait ? .1 : .3) * formed;
+  pMat.uniforms.uGain.value = 1 + .15 * formed;
+  pMat.uniforms.uOpacity.value *= 1 - .8 * win(t, S.practise.start - .2, S.cta.start - .2, .4, .4);
+
+  // company panel
+  const rp = win(t, S.research.start - .2, S.practise.start + .15, .8, .6);
+  panel.visible = rp > 0;
+  if (panel.visible) {
+    drawPanel(t);
+    const enter = eout(seg(t, S.research.start - .2, S.research.start + .7)), exit = eio(seg(t, S.practise.start - .45, S.practise.start + .15));
+    panel.position.set((portrait ? 0 : VW * .02) + exit * VW * .8, (portrait ? VH * .03 : -VH * .01) + Math.sin(t * 1.2) * .05, -6 * (1 - enter));
+    panel.rotation.set(-.08 + Math.sin(t * .7) * .03, (1 - enter) * 1.1 - .18 + Math.sin(t * .5) * .05 - exit * .9, .02);
+    panel.material.opacity = Math.min(enter * 1.3, 1);
+  }
+
+  // AI interviewer orb and voice ring
+  const ov = win(t, S.practise.start - .3, S.cta.start, .6, .5);
+  orbG.visible = ov > 0;
+  if (orbG.visible) {
+    orbG.scale.setScalar(Math.max(.001, eback(seg(t, S.practise.start - .3, S.practise.start + .4)) * (1 - eio(seg(t, S.cta.start - .5, S.cta.start)))));
+    orb.rotation.set(t * .7, t * .9, 0); orb.material.opacity = ov;
+    core.scale.setScalar(1 + .12 * Math.sin(t * 8)); core.material.opacity = ov;
+    // the interviewer "speaks" while its bubbles appear
+    const talk = Math.max(win(t, bubT[0] - .1, bubT[1] - .1, .15, .2), win(t, bubT[2] - .1, bubT[2] + 1.8, .15, .3)) * .85 + .15;
+    for (let i = 0; i < NB; i++) {
+      const b = bars[i], a = b.userData.a + t * .25;
+      const amp = .25 + talk * (.5 + .5 * Math.sin(i * .9 + t * 11) * Math.sin(i * .31 - t * 6.3)) * 1.6;
+      const r0 = U * .155 + amp * U * .05 / 2;
+      b.position.set(Math.cos(a) * r0, Math.sin(a) * r0, 0); b.rotation.z = a - Math.PI / 2;
+      b.scale.set(1, Math.max(.05, amp), 1); b.material.opacity = ov;
+    }
+  }
+
+  // bloom: burst on the reveal and the end card
+  bloom.strength = .55 + .9 * Math.exp(-Math.max(0, t - S.reveal.start) * 3) * (t > S.reveal.start - .1 ? 1 : 0) + .35 * Math.exp(-Math.max(0, t - S.cta.start) * 3) * (t > S.cta.start - .1 ? 1 : 0);
+
+  // DOM overlays
+  flash.style.opacity = t > S.reveal.start - .08 ? .85 * Math.exp(-(t - S.reveal.start + .08) * 7) : 0;
+  brand.style.opacity = win(t, S.apply.start - .2, S.cta.start, .5, .4) * .9;
+  setCaption(t); setKicker(t);
+  agEls.forEach((el, i) => { const p = seg(t, agT[i] - .05, agT[i] + .35), o = t < agT[i] - .05 ? 0 : Math.min(1, p * 3) * (1 - seg(t, h1 - .2, h1 + .2));
+    el.style.opacity = o * .9; el.style.transform = `translate(-50%,-50%) translate(${(i - 1) * 4}%, ${(i - 1) * 85 + (portrait ? -60 : -20)}%) rotate(${(i - 1) * -4}deg) scale(${.6 + .4 * eback(p)})`; });
+  ['b0', 'b1', 'b2'].forEach((id, i) => { const el = $(id), p = eout(seg(t, bubT[i], bubT[i] + .4)), o = t < bubT[i] ? 0 : p * (1 - seg(t, S.cta.start - .5, S.cta.start - .1));
+    el.style.opacity = o; el.style.transform = `translateY(${(1 - p) * 26}px) scale(${.94 + .06 * p})`; });
+  const cp = seg(t, S.cta.start + .6, S.cta.start + 1.2);
+  cta.style.opacity = eout(cp); cta.style.transform = `translateY(${(1 - eout(cp)) * 30}px)`;
+
+  composer.render();
+  return true;
+};
+window.ready = true;
+</script>
+</body>
+</html>

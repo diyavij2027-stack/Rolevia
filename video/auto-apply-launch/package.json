@@ -1,0 +1,15 @@
+{
+  "name": "rolevia-auto-apply-launch",
+  "private": true,
+  "description": "Three.js launch video for Role.via Auto Apply, rendered frame by frame with Playwright and ffmpeg",
+  "scripts": {
+    "audio": "python build_audio.py ../../../tts af_heart",
+    "render:portrait": "node render.js portrait",
+    "render:landscape": "node render.js landscape"
+  },
+  "dependencies": {
+    "@fontsource/dm-sans": "5.1.0",
+    "@fontsource/sora": "5.1.0",
+    "three": "0.169.0"
+  }
+}

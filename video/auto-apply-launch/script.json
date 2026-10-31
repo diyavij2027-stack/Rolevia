@@ -1,0 +1,9 @@
+[
+ {"id":"hook",    "say":"Placement season. The same application form. Again, and again, and again.", "cap":"Placement season. The same application form. Again, and again, and again."},
+ {"id":"reveal",  "say":"So we built Auto Apply.", "cap":"So we built Auto Apply."},
+ {"id":"apply",   "say":"Role dot via now sends your job applications for you.", "cap":"Role.via now sends your job applications for you."},
+ {"id":"pivot",   "say":"You spend that time where it counts.", "cap":"You spend that time where it counts."},
+ {"id":"research","say":"Research the company, with every fact labelled verified, reported, or A.I. generated.", "cap":"Research the company, with every fact labelled verified, reported or AI-generated."},
+ {"id":"practise","say":"Then practise the interview out loud, with an A.I. interviewer that follows up on thin answers.", "cap":"Then practise the interview out loud, with an AI interviewer that follows up on thin answers."},
+ {"id":"cta",     "say":"Auto Apply. Now on Role dot via. Start free at rolevia dot x y z.", "cap":"Auto Apply. Now on Role.via. Start free at rolevia.xyz"}
+]

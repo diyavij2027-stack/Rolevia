@@ -1,0 +1,47 @@
+{
+ "duration": 33.179,
+ "segments": [
+  {
+   "id": "hook",
+   "cap": "Placement season. The same application form. Again, and again, and again.",
+   "start": 0.6,
+   "end": 4.952
+  },
+  {
+   "id": "reveal",
+   "cap": "So we built Auto Apply.",
+   "start": 5.502,
+   "end": 6.953
+  },
+  {
+   "id": "apply",
+   "cap": "Role.via now sends your job applications for you.",
+   "start": 7.853,
+   "end": 11.245
+  },
+  {
+   "id": "pivot",
+   "cap": "You spend that time where it counts.",
+   "start": 11.695,
+   "end": 13.38
+  },
+  {
+   "id": "research",
+   "cap": "Research the company, with every fact labelled verified, reported or AI-generated.",
+   "start": 13.78,
+   "end": 19.135
+  },
+  {
+   "id": "practise",
+   "cap": "Then practise the interview out loud, with an AI interviewer that follows up on thin answers.",
+   "start": 19.585,
+   "end": 25.281
+  },
+  {
+   "id": "cta",
+   "cap": "Auto Apply. Now on Role.via. Start free at rolevia.xyz",
+   "start": 25.881,
+   "end": 30.979
+  }
+ ]
+}
